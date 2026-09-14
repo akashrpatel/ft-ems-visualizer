@@ -44,6 +44,10 @@ Just serve the folder — it's a single `index.html` + STL files. No build step 
 ### Option 3: GitHub Pages
 This repo is configured for GitHub Pages. Enable it in Settings → Pages → Deploy from branch `main`.
 
+### Option 4: Netlify Hosted
+Dev: https://stunning-genie-d26053.netlify.app/
+"Prod": https://ft-ems-planner.netlify.app/
+
 ## Zone-Based Auto Placement
 
 The planner includes an intelligent zone-based auto-placement system that organizes components by function:
