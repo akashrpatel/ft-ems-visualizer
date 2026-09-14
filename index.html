@@ -1,0 +1,3022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FT EMS Layout Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #1a1a2e; --panel: #16213e; --accent: #0f3460;
+  --highlight: #e94560; --text: #e0e0e0; --text-dim: #8888aa;
+  --success: #4ecca3; --danger: #e94560;
+}
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Top bar */
+#topbar { background: var(--panel); border-bottom: 1px solid var(--accent); padding: 8px 16px; display: flex; align-items: center; gap: 12px; z-index: 10; }
+#topbar h1 { font-size: 18px; font-weight: 600; color: var(--highlight); white-space: nowrap; }
+#topbar h1 span { color: var(--text-dim); font-weight: 400; font-size: 13px; margin-left: 8px; }
+.btn { background: var(--accent); color: var(--text); border: 1px solid rgba(255,255,255,0.1); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.15s; white-space: nowrap; }
+.btn:hover { background: #1a4a8a; border-color: rgba(255,255,255,0.2); }
+.btn-danger { background: var(--danger); }
+.btn-danger:hover { background: #c73650; }
+.btn-active { background: var(--highlight); }
+.topbar-spacer { flex: 1; }
+.topbar-sep { width: 1px; height: 24px; background: var(--accent); }
+
+/* Main layout */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* Sidebar */
+#sidebar { width: 280px; min-width: 280px; background: var(--panel); border-right: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
+#printer-select { padding: 12px; border-bottom: 1px solid var(--accent); }
+#printer-select label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+#printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: 13px; }
+#search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
+#search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: 13px; }
+#search-box input::placeholder { color: var(--text-dim); }
+#component-lib { flex: 1; overflow-y: auto; padding: 8px 0; }
+.cat-header { padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.cat-header:hover { color: var(--text); }
+.cat-header .arrow { transition: transform 0.2s; font-size: 10px; }
+.cat-header.collapsed .arrow { transform: rotate(-90deg); }
+.cat-header .count { margin-left: auto; font-size: 10px; background: var(--accent); padding: 1px 6px; border-radius: 8px; }
+.cat-items { padding: 0 8px 4px; }
+.cat-items.hidden { display: none; }
+.comp-item { padding: 5px 8px; margin: 1px 0; border-radius: 4px; cursor: grab; font-size: 12px; display: flex; align-items: center; gap: 6px; transition: background 0.1s; }
+.comp-item:hover { background: rgba(255,255,255,0.06); }
+.comp-item.filtered-out { display: none; }
+.comp-item .thumb { width: 24px; height: 24px; border-radius: 3px; flex-shrink: 0; }
+.comp-item .comp-info { flex: 1; min-width: 0; }
+.comp-item .comp-name { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.comp-item .dims { color: var(--text-dim); font-size: 10px; }
+
+/* Canvas area */
+#canvas-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg); }
+#canvas-wrap canvas { position: absolute; top: 0; left: 0; }
+#canvas-info { position: absolute; bottom: 8px; left: 8px; font-size: 11px; color: var(--text-dim); pointer-events: none; }
+#view-3d { position: absolute; inset: 0; display: none; }
+
+/* BOM panel */
+#bom-panel { width: 220px; min-width: 220px; background: var(--panel); border-left: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
+#bom-panel h3 { padding: 12px; font-size: 13px; border-bottom: 1px solid var(--accent); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+#bom-panel h3 .btn { padding: 3px 8px; font-size: 11px; }
+#bom-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
+.bom-item { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.bom-item .bom-count { color: var(--highlight); font-weight: 600; }
+#bom-empty { color: var(--text-dim); font-size: 13px; padding: 8px 0; text-align: center; }
+#bom-total { padding: 8px 12px; border-top: 1px solid var(--accent); font-size: 12px; color: var(--text-dim); }
+
+/* Print checklist modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.modal { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto; }
+.modal h2 { margin-bottom: 16px; color: var(--highlight); }
+.modal table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.modal th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--accent); color: var(--text-dim); font-size: 11px; text-transform: uppercase; }
+.modal td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.modal .check-col { width: 30px; text-align: center; }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+/* Suggest Layout Wizard */
+.wizard-modal { max-width: 700px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; }
+.wizard-modal h2 { margin-bottom: 4px; }
+.wizard-printer { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+.wizard-printer strong { color: var(--highlight); }
+.wizard-search { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; }
+.wizard-search::placeholder { color: var(--text-dim); }
+.wizard-cats { flex: 1; overflow-y: auto; margin-bottom: 12px; }
+.wizard-cat { margin-bottom: 8px; }
+.wizard-cat-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg); border-radius: 4px; cursor: pointer; user-select: none; }
+.wizard-cat-header:hover { background: rgba(255,255,255,0.05); }
+.wizard-cat-header .arrow { font-size: 10px; transition: transform 0.2s; }
+.wizard-cat-header.collapsed .arrow { transform: rotate(-90deg); }
+.wizard-cat-name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+.wizard-cat-actions { display: flex; gap: 4px; }
+.wizard-cat-actions button { background: none; border: none; color: var(--text-dim); font-size: 10px; cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+.wizard-cat-actions button:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+.wizard-items { padding: 4px 0 4px 16px; }
+.wizard-items.hidden { display: none; }
+.wizard-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 3px; font-size: 12px; cursor: pointer; }
+.wizard-item:hover { background: rgba(255,255,255,0.04); }
+.wizard-item input[type="checkbox"] { accent-color: var(--highlight); cursor: pointer; }
+.wizard-item .wi-name { flex: 1; }
+.wizard-item .wi-dims { color: var(--text-dim); font-size: 11px; }
+.wizard-item .wi-quantity { display: flex; align-items: center; gap: 4px; }
+.wizard-item .qty-input { width: 40px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 2px 4px; border-radius: 2px; font-size: 11px; text-align: center; }
+.wizard-item.filtered-out { display: none; }
+.wizard-footer { display: flex; align-items: center; gap: 12px; }
+.wizard-footer .wizard-count { flex: 1; font-size: 12px; color: var(--text-dim); }
+.wizard-footer .wizard-count strong { color: var(--highlight); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+
+.lock-indicator { position: absolute; font-size: 8px; pointer-events: none; }
+
+/* Print styles */
+@media print {
+  body * { visibility: hidden; }
+  .modal-overlay, .modal-overlay * { visibility: visible; }
+  .modal-overlay { position: absolute; inset: 0; background: white; }
+  .modal { color: #000; border: none; max-width: 100%; max-height: none; }
+  .modal h2 { color: #e94560; }
+  .modal th { color: #666; border-bottom-color: #ccc; }
+  .modal td { border-bottom-color: #eee; }
+  .modal-actions { display: none; }
+  .check-col { border: 1px solid #999; width: 18px; height: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>⚡ FT EMS Layout Planner <span>by FizzysTech</span></h1>
+  <div class="topbar-spacer"></div>
+  <button class="btn" id="btn-2d" onclick="setView('2d')">📐 2D Layout</button>
+  <button class="btn" id="btn-3d" onclick="setView('3d')">🧊 3D View</button>
+  <div class="topbar-sep"></div>
+  <button class="btn" onclick="saveLayout()">💾 Save</button>
+  <button class="btn" onclick="loadLayout()">📂 Load</button>
+  <button class="btn btn-danger" onclick="clearLayout()">🗑 Clear</button>
+  <button class="btn" onclick="exportImage()">🖼 Export</button>
+  <div class="topbar-sep"></div>
+  <button class="btn" style="background: var(--highlight);" onclick="showSuggestLayout()">✨ Suggest Layout</button>
+  <button class="btn" id="btn-autoplace" onclick="autoPlaceExisting()">🧩 Auto Place</button>
+  <div class="topbar-sep"></div>
+
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <div id="printer-select">
+      <label>Printer Model</label>
+      <select id="printer" onchange="onPrinterChange()"></select>
+    </div>
+    <div id="search-box">
+      <input type="text" id="search" placeholder="🔍 Search components..." oninput="onSearch()">
+    </div>
+    <div id="component-lib"></div>
+  </div>
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div id="view-3d"></div>
+    <div id="canvas-info">Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | Del: Remove</div>
+  </div>
+  <div id="bom-panel">
+    <h3>📋 Parts List <button class="btn" onclick="showChecklist()">🖨</button></h3>
+    <div id="bom-list"><div id="bom-empty">No components placed</div></div>
+    <div id="bom-total"></div>
+  </div>
+</div>
+
+<script>
+// ============== DATA ==============
+const PRINTERS = [
+  { id: 'v0-120',       name: 'Voron V0 — 120mm',       w: 226, h: 124, frameStls: [
+    { stl: 'ems-files/FT-EMS Frame-v0.stl' },
+  ]},
+  { id: 'v24-250',      name: 'Voron V2.4 — 250mm',     w: 330, h: 330 },
+  { id: 'v24-300',      name: 'Voron V2.4 — 300mm',     w: 420, h: 420, frameStls: [
+    { stl: 'ems-files/ft_ems_v24_300_frame_1of4-upper-left.stl' },
+    { stl: 'ems-files/ft_ems_v24_300_frame_2of4-upper-right.stl' },
+    { stl: 'ems-files/ft_ems_v24_300_frame_3of4-lower-right.stl' },
+    { stl: 'ems-files/ft_ems_v24_300_frame_4of4-lower-left.stl' },
+  ]},
+  { id: 'v24-350',      name: 'Voron V2.4 — 350mm',     w: 470, h: 470, frameStls: [
+    { stl: 'ems-files/ft_ems_v24_350_frame_1of4-upper-left.stl' },
+    { stl: 'ems-files/ft_ems_v24_350_frame_2of4-upper-right.stl' },
+    { stl: 'ems-files/ft_ems_v24_350_frame_3of4-lower-right.stl' },
+    { stl: 'ems-files/ft_ems_v24_350_frame_4of4-lower-left.stl' },
+  ]},
+  { id: 'trident-250',  name: 'Voron Trident — 250mm',  w: 370, h: 370, frameStls: [
+    { stl: 'ems-files/FT EMS Trident 250 Frame 1-4.stl' },
+    { stl: 'ems-files/FT EMS Trident 250 Frame 2-4.stl' },
+    { stl: 'ems-files/FT EMS Trident 250 Frame 3-4.stl' },
+    { stl: 'ems-files/FT EMS Trident 250 Frame 4-4.stl' },
+  ]},
+  { id: 'trident-300',  name: 'Voron Trident — 300mm',  w: 419, h: 419, frameStls: [
+    { stl: 'ems-files/ft-ems-trident-300-frame-1-4.stl' },
+    { stl: 'ems-files/ft-ems-trident-300-frame-2-4.stl' },
+    { stl: 'ems-files/ft-ems-trident-300-frame-3-4.stl' },
+    { stl: 'ems-files/ft-ems-trident-300-frame-4-4.stl' },
+  ]},
+  { id: 'trident-350',  name: 'Voron Trident — 350mm',  w: 470, h: 470, frameStls: [
+    { stl: 'ems-files/ft-ems-trident-doom-rear-1-4.stl' },
+    { stl: 'ems-files/ft-ems-trident-doom-rear-2-4.stl' },
+    { stl: 'ems-files/ft-ems-trident-doom-rear-3-4.stl' },
+    { stl: 'ems-files/ft-ems-trident-doom-rear-4-4.stl' },
+  ]},
+  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameStls: [
+    { stl: 'ems-files/FT EMS SW Frame V2.stl' },
+  ]},
+  { id: 'micron-180',   name: 'Micron 180',              w: 280, h: 287, frameStls: [
+    { stl: 'ems-files/ft_ems_micron_1of4-upper-left.stl' },
+    { stl: 'ems-files/ft_ems_micron_2of4-upper-right.stl' },
+    { stl: 'ems-files/ft_ems_micron_3of4-lower-right.stl' },
+    { stl: 'ems-files/ft_ems_micron_4of4-lower-left.stl' },
+  ]},
+  { id: 'doom-300',     name: 'Doom Cube 300',           w: 450, h: 450, frameStls: [
+    { stl: 'ems-files/FT EMS Doom Cube - 1of4.stl' },
+    { stl: 'ems-files/FT EMS Doom Cube - 2of4.stl' },
+    { stl: 'ems-files/FT EMS Doom Cube - 3of4.stl' },
+    { stl: 'ems-files/FT EMS Doom Cube - 4of4.stl' },
+  ]},
+  { id: 'doom-350',     name: 'Doom Cube 350',           w: 500, h: 500, frameStls: [
+    { stl: 'ems-files/FT EMS Doom Cube 350 - 1of4.stl' },
+    { stl: 'ems-files/FT EMS Doom Cube 350 - 2of4.stl' },
+    { stl: 'ems-files/FT EMS Doom Cube 350 - 3of4.stl' },
+    { stl: 'ems-files/FT EMS Doom Cube 350 - 4of4.stl' },
+  ]},
+];
+
+const CATEGORIES = [
+  { id: 'mcu', name: 'MCU / Controller Boards', color: '#4e79a7', items: [
+    { name: 'BTT Octopus',               w: 160, h: 100, stl: 'ems-files/ft-btt-octopus-mount.stl',                          heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Octopus V2',            w: 160, h: 100, stl: 'ems-files/ft-btt-octopus-mount-v2.stl',                      heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Octopus V1 Pro (HSI)',   w: 158, h: 99, stl: 'ems-files/ft-btt-octopus-v1-pro-mount-hsi.stl',             heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Kraken V1',             w: 199, h: 111, stl: 'ems-files/ft-btt-kraken-v1-mount.stl',                      heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Manta M8P',             w: 105, h: 173, stl: 'ems-files/ft-btt-manta-m8p-mount.stl',                      heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Manta M8P V2',          w: 169, h: 101, stl: 'ems-files/ft-btt-manta-m8p-mount-v2.stl',                   heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Manta M5P',             w: 99,  h: 141, stl: 'ems-files/ft-btt-manta-mp5-mount.stl',                      heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Manta M4P',             w: 97,  h: 162, stl: 'ems-files/ft-btt-manta-mp4-mounts.stl',                     heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Manta E3EZ',            w: 109, h: 45,  stl: 'ems-files/ft-btt-manta-e3ez-mount.stl',                     heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKR Mini E3',           w: 105, h: 71,  stl: 'ems-files/ft-btt-skr-mini-e3-mount.stl',                    heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKR 3',                 w: 84,  h: 109, stl: 'ems-files/ft-btt-skr-3-mount.stl',                          heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKR Pro',               w: 148, h: 97,  stl: 'ems-files/ft-btt-skr-pro-mount.stl',                        heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKR V1.4',              w: 109, h: 83,  stl: 'ems-files/ft-btt-skr-v1-4-mount.stl',                      heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKRAT V1',              w: 88,  h: 112, stl: 'ems-files/ft-btt-skrat-v1-mount.stl',                      heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKR Pico',              w: 54,  h: 63,  stl: 'ems-files/ft-btt-skr-pico-mount.stl',                      heat: 2, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT SKR Pico V2',           w: 66,  h: 57,  stl: 'ems-files/ft-skr-pico-mount-v2.stl',                       heat: 2, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'LDO Leviathan V1.2',        w: 168, h: 98,  stl: 'ems-files/ft-ldo-voron-leviathan-v1-2-mount.stl',          heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Fysetc Spider V3.0',        w: 152, h: 79,  stl: 'ems-files/ft-fysetc-spider-v30-mount.stl',                 heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Fysetc Catalyst V2.0',      w: 77,  h: 129, stl: 'ems-files/ft-fysetc-catalyst-v2-0-mount.stl',              heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Fysetc Cheetah V3',         w: 101, h: 71,  stl: 'ems-files/ft-fysetc-cheeta-v3-mounts.stl',                 heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Mellow Fly Gemini',         w: 57,  h: 89,  stl: 'ems-files/ft-fly-gemini-mount.stl',                        heat: 2, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Mellow Fly D5',             w: 91,  h: 65,  stl: 'ems-files/ft-mellow-fly-d5-mount.stl',                     heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'MKS Monster 8 V2',          w: 160, h: 90,  stl: 'ems-files/ft-monster-8-v2-mount.stl',                      heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Annex Supernova',           w: 90,  h: 75,  stl: 'ems-files/ft-annex-supernova-mount.stl',                   heat: 4, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Ouroboros TMC4671',         w: 115, h: 115, stl: 'ems-files/ft-ouroboros-tmc4671-controller-mount.stl',       heat: 5, serviceSide: 'top',    placementHint: 'center' },
+  ]},
+  { id: 'exp', name: 'Expansion / Driver Boards', color: '#af7aa1', items: [
+    { name: 'BTT EXT MOT (Expansion)',   w: 45,  h: 83,  stl: 'ems-files/ft-btt-ext-mot-mount.stl',                       heat: 6, serviceSide: 'left',   placementHint: null },
+    { name: 'BTT TMC5160T Plus',         w: 58,  h: 50,  stl: 'ems-files/ft-btt-tmc5160t-plus-mount.stl',                 heat: 6, serviceSide: 'top',    placementHint: null },
+    { name: 'BTT CEB V1.0',             w: 139, h: 18,  stl: 'ems-files/ft-btt-ceb-v1-0-mount.stl',                      heat: 1, serviceSide: 'right',  placementHint: null },
+    { name: 'Klipper Expander',          w: 99,  h: 23,  stl: 'ems-files/ft-klipper-expander-mount.stl',                  heat: 1, serviceSide: 'top',    placementHint: null },
+    { name: 'Fysetc MOSFET V1.0',       w: 34,  h: 69,  stl: 'ems-files/ft-fysetc-mosfet-v1-0-mount.stl',                heat: 5, serviceSide: 'top',    placementHint: null },
+    { name: 'ERCF Easy BRD',            w: 81,  h: 34,  stl: 'ems-files/ft-ercf-easy-brd-mount.stl',                     heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'Therm2',                   w: 40,  h: 15,  stl: 'ems-files/ft-therm2-mount.stl',                            heat: 1, serviceSide: 'top',    placementHint: null },
+  ]},
+  { id: 'can', name: 'CAN / USB Boards', color: '#f28e2b', items: [
+    { name: 'BTT U2C',                  w: 86,  h: 26,  stl: 'ems-files/ft-btt-u2c-mount.stl',                           heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'BTT EBB USB V2',           w: 42,  h: 42,  stl: 'ems-files/ft-btt-ebb-usb-v2-mount.stl',                    heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'BTT EBB2209 USB V1.0',     w: 33,  h: 24,  stl: 'ems-files/ft-btt-ebb2209-usb-v1-0-mount.stl',             heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'BTT MMB CAN V1.0',         w: 126, h: 51,  stl: 'ems-files/ft-btt-mmb-can-v1-0-mount.stl',                 heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'LDO Nitehawk USB',         w: 31,  h: 48,  stl: 'ems-files/FT - LDO Nitehawk USB mount.stl',                heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'LDO Nitehawk USB (TI)',     w: 31,  h: 48,  stl: 'ems-files/FT - LDO Nitehawk USB mount (threaded inserts).stl', heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'LDO Orbiter USB',          w: 28,  h: 34,  stl: 'ems-files/ft-ldo-orbitor-usb-mount.stl',                   heat: 2, serviceSide: 'top',    placementHint: null },
+    { name: 'LDO USB Expander + RPi Zero', w: 52, h: 64, stl: 'ems-files/ft-ldo-usb-expander-rpi-zero-mount.stl',        heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'USB Hub Isolator',          w: 57,  h: 39,  stl: 'ems-files/ft-quason-usb-hub-isolator-mount.stl',          heat: 1, serviceSide: 'top',    placementHint: null },
+  ]},
+  { id: 'sbc', name: 'Single Board Computers', color: '#59a14f', items: [
+    { name: 'Raspberry Pi 3/4',         w: 54,  h: 91,  stl: 'ems-files/ft-raspberry-pi-3-4-mount.stl', orient: 'zflat',  heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Pi',                   w: 54,  h: 91,  stl: 'ems-files/ft-btt-pi-mount.stl',                            heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'BTT Pi (w/ Antenna)',       w: 54,  h: 91,  stl: 'ems-files/ft-btt-pi-mount-w-antenna.stl',                  heat: 3, serviceSide: 'top',    placementHint: 'center' },
+    { name: 'Orange Pi Zero',           w: 56,  h: 63,  stl: 'ems-files/ft-orange-pi-zero.stl',                         heat: 2, serviceSide: 'top',    placementHint: 'center' },
+  ]},
+  { id: 'psu', name: 'Power Supplies', color: '#e15759', items: [
+    { name: 'Mean Well LRS-200/350-24',  w: 62,  h: 162, stl: 'ems-files/ft-mean-well-lrs-200-350.stl', orient: 'zflat',      heat: 8, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'Mean Well LRS-150-24',      w: 88,  h: 48,  stl: 'ems-files/ft-mean-well-lrs-150-24-mount.stl', orient: 'zflat',  heat: 7, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'Mean Well LRS-100-24',      w: 95,  h: 133, stl: 'ems-files/ft-mean-well-lrs-100-24-mount.stl', orient: 'zflat',  heat: 7, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'Mean Well LRS-600-24',      w: 144, h: 225, stl: 'ems-files/ft-mean-well-lrs-600-24-mount.stl', orient: 'zflat',  heat: 10, serviceSide: 'top',   placementHint: 'top-left' },
+    { name: 'Mean Well UHP-200',         w: 52,  h: 198, stl: 'ems-files/ft-mean-well-uhp-200-mount.stl', orient: 'zflat',     heat: 8, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'Mean Well UHP-350',         w: 56,  h: 224, stl: 'ems-files/ft-meanwel-uhp-350-mount-updated.stl', orient: 'zflat', heat: 9, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'Mean Well RS-25-5',         w: 15,  h: 90,  stl: 'ems-files/ft-mean-well-rs-25-5-mount.stl', orient: 'zflat',     heat: 5, serviceSide: 'top',    placementHint: 'top-left-near' },
+    { name: 'Mean Well IRM-90-48ST',     w: 110, h: 45,  stl: 'ems-files/ft-mean-well-irm-90-48st-mount.stl', orient: 'zflat', heat: 7, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'Mornsun LMF-200-24',       w: 162, h: 62,  stl: 'ems-files/ft-mornsun-lmf-200-24-mount.stl', orient: 'zflat',    heat: 7, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'LDO PSU Mount',            w: 125, h: 93,  stl: 'ems-files/FT-LDO_PSU_Mount.stl',                               heat: 8, serviceSide: 'top',    placementHint: 'top-left' },
+  ]},
+  { id: 'fan', name: 'Fans / Cooling', color: '#76b7b2', items: [
+    { name: '4010 Fan Mount',            w: 46,  h: 40,  stl: 'ems-files/ft-4010-fan-mount.stl',                          heat: 0, serviceSide: 'top',    placementHint: null },
+    { name: 'TinyFan',                  w: 56,  h: 59,  stl: 'ems-files/ft-tinyfan-mount.stl',                           heat: 0, serviceSide: 'top',    placementHint: null },
+  ]},
+  { id: 'relay', name: 'SSR / Power Control', color: '#edc948', items: [
+    { name: 'SSR Mount',                w: 64,  h: 44,  stl: 'ems-files/ft-ssr-mount.stl',                               heat: 7, serviceSide: 'top',    placementHint: 'top-left' },
+    { name: 'LM2596 Buck Converter',    w: 44,  h: 23,  stl: 'ems-files/ft-lm2596-buck-converter-mount.stl',            heat: 4, serviceSide: 'top',    placementHint: 'top-left-near' },
+    { name: 'Tobsun DC-DC Converter',   w: 56,  h: 63,  stl: 'ems-files/ft-tobsun-dc-dc-converter.stl',                 heat: 3, serviceSide: 'top',    placementHint: 'top-left-near' },
+  ]},
+  { id: 'distribution', name: 'Terminal Blocks / Distribution', color: '#b07aa1', items: [
+    { name: 'Wago 3-way Terminal Block', w: 35,  h: 20,  stl: '',                                                        heat: 0, serviceSide: 'top',    placementHint: 'top-left-near' },
+    { name: 'Wago 5-way Terminal Block', w: 55,  h: 20,  stl: '',                                                        heat: 0, serviceSide: 'top',    placementHint: 'top-left-near' },
+    { name: 'DIN Rail Terminal Strip',   w: 80,  h: 15,  stl: '',                                                        heat: 0, serviceSide: 'top',    placementHint: 'top-left-near' },
+    { name: 'AC Inlet Socket',           w: 30,  h: 30,  stl: '',                                                        heat: 0, serviceSide: 'bottom', placementHint: 'top-left' },
+  ]},
+  { id: 'ducts', name: 'Cable Ducts', color: '#ff9da7', items: [
+    { name: 'Cable Duct 120mm',          w: 120, h: 29,  stl: 'ems-files/FT - Cable Duct 120mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct 150mm',          w: 150, h: 29,  stl: 'ems-files/FT - Cable Duct 150mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct 180mm',          w: 180, h: 29,  stl: 'ems-files/FT - Cable Duct 180mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct 210mm',          w: 210, h: 29,  stl: 'ems-files/FT - Cable Duct 210mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct 240mm',          w: 240, h: 29,  stl: 'ems-files/FT - Cable Duct 240mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct 270mm',          w: 270, h: 29,  stl: 'ems-files/FT - Cable Duct 270mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct 300mm',          w: 300, h: 29,  stl: 'ems-files/FT - Cable Duct 300mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct L 90mm',         w: 90,  h: 90,   stl: 'ems-files/ft-cable-duct-l-90mm.stl', orient: 'zflat',       heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct L 120mm',        w: 120, h: 120,  stl: 'ems-files/ft-cable-duct-l-120mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct L 150mm',        w: 150, h: 150,  stl: 'ems-files/ft-cable-duct-l-150mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct L 180mm',        w: 180, h: 180,  stl: 'ems-files/ft-cable-duct-l-180mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+    { name: 'Cable Duct L 210mm',        w: 210, h: 210,  stl: 'ems-files/ft-cable-duct-l-210mm.stl', orient: 'zflat',      heat: 0, serviceSide: null,     placementHint: null },
+  ]},
+];
+
+// ============== CONNECTION RULES ==============
+// [category/name pattern A, category/name pattern B, strength 1-10]
+const CONNECTION_RULES = [
+  // Power flow: AC → PSU → distribution → consumers
+  ['psu', 'relay', 9],        // PSU ↔ SSR (mains AC switching)
+  ['psu', 'distribution', 8], // PSU ↔ terminal blocks/Wagos (power distribution)
+  ['distribution', 'mcu', 7], // Distribution ↔ MCU power
+  ['distribution', 'sbc', 6], // Distribution ↔ SBC power  
+  ['distribution', 'exp', 6], // Distribution ↔ expansion boards power
+  ['distribution', 'can', 5], // Distribution ↔ CAN boards power
+  
+  // Data/communication flows  
+  ['mcu', 'sbc', 8],          // MCU ↔ Raspberry Pi (USB/UART)
+  ['mcu', 'exp', 7],          // MCU ↔ stepper drivers
+  ['sbc', 'can', 6],          // SBC ↔ CAN boards
+  ['mcu', 'can', 5],          // MCU ↔ CAN boards (alternative to SBC)
+  ['exp', 'can', 4],          // Expansion boards ↔ CAN (for distributed control)
+];
+
+// ============== SIMULATED ANNEALING WEIGHTS ==============
+const SA_WEIGHTS = {
+  overlap: 5000,      // HARD constraint: no overlaps (must dominate all others)
+  thermal: 5,         // Hot components spread apart
+  cableRouting: 3,    // Connected components close together  
+  distribution: 0.005,// Even distribution — very light touch to avoid fighting overlap
+  accessibility: 4    // Service sides accessible
+};
+
+// ============== STATE ==============
+let printer = PRINTERS[6];
+let placed = [];
+let selected = null;
+let nextId = 1;
+let currentView = '2d';
+
+// 2D Canvas
+const cvs = document.getElementById('canvas');
+const ctx = cvs.getContext('2d');
+let scale = 1.5, panX = 60, panY = 60;
+let dragging = null, panning = false, panStart = {x:0,y:0};
+
+const HEX_SPACING = 11; // 11mm between columns (22mm center-to-center hex grid)
+const HEX_ROW = 11 * Math.sqrt(3); // ~19.05mm between rows
+const HEX_OFFSET_X = 15; // offset from panel left edge
+const HEX_OFFSET_Y = 5.8; // offset from panel bottom edge
+const HEX_R = 4;
+const COMP_PAD = 15;   // mm padding around each component for cable duct clearance
+const FRAME_MARGIN = 15; // mm inset from frame edge — keep components off the border
+const CABLE_DUCT_MARGIN = 120; // mm clearance needed for 90mm L-shaped cable ducts
+const thumbQueue = [];
+let thumbBusy = false;
+
+function processThumbQueue() {
+  if (thumbBusy || thumbQueue.length === 0) return;
+  thumbBusy = true;
+  const item = thumbQueue.shift();
+  const stlPath = item.stl.startsWith('ems-files/') ? item.stl : 'ems-files/' + item.stl;
+
+  function renderThumb(geo) {
+    const g = geo.clone();
+    g.computeBoundingBox();
+    const c = new THREE.Vector3(); g.boundingBox.getCenter(c);
+    g.translate(-c.x, -c.y, -c.z);
+    if (item.orient === 'upright' || item.orient === 'zflat') g.rotateX(-Math.PI / 2);
+    g.computeBoundingBox();
+    const bb = g.boundingBox;
+    const sz = new THREE.Vector3(); bb.getSize(sz);
+
+    // Isometric-ish 2D projection of STL triangles
+    const tCtx = item.canvas.getContext('2d');
+    tCtx.clearRect(0, 0, 48, 48);
+    const maxDim = Math.max(sz.x, sz.y, sz.z) || 1;
+    const s = 38 / maxDim; // scale to fit 48px with padding
+    const cx = 24, cy = 26;
+    // Simple isometric: x' = (x-z)*cos30, y' = -(y) + (x+z)*sin30
+    const cos30 = 0.866, sin30 = 0.5;
+    const proj = (x, y, z) => [cx + (x - z) * cos30 * s, cy - y * s + (x + z) * sin30 * s * 0.5];
+
+    const posAttr = g.attributes.position;
+    const triCount = posAttr.count / 3;
+    // Draw filled triangles with slight variation for depth feel
+    tCtx.globalAlpha = 0.7;
+    const baseColor = new THREE.Color(item.color);
+    for (let i = 0; i < triCount; i++) {
+      const i3 = i * 3;
+      const ax = posAttr.getX(i3), ay = posAttr.getY(i3), az = posAttr.getZ(i3);
+      const bx = posAttr.getX(i3+1), by = posAttr.getY(i3+1), bz = posAttr.getZ(i3+1);
+      const cxx = posAttr.getX(i3+2), cyy = posAttr.getY(i3+2), czz = posAttr.getZ(i3+2);
+      // Face normal Y component for basic shading
+      const nx = (by-ay)*(czz-az)-(bz-az)*(cyy-ay);
+      const ny = (bz-az)*(cxx-ax)-(bx-ax)*(czz-az);
+      const nz = (bx-ax)*(cyy-ay)-(by-ay)*(cxx-ax);
+      const nl = Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+      const shade = 0.4 + 0.6 * Math.abs(ny/nl);
+      const [x1,y1] = proj(ax,ay,az);
+      const [x2,y2] = proj(bx,by,bz);
+      const [x3,y3] = proj(cxx,cyy,czz);
+      tCtx.fillStyle = `rgb(${Math.round(baseColor.r*255*shade)},${Math.round(baseColor.g*255*shade)},${Math.round(baseColor.b*255*shade)})`;
+      tCtx.beginPath(); tCtx.moveTo(x1,y1); tCtx.lineTo(x2,y2); tCtx.lineTo(x3,y3); tCtx.closePath(); tCtx.fill();
+    }
+    tCtx.globalAlpha = 1;
+    thumbBusy = false;
+    // Process next after a frame to avoid blocking UI
+    setTimeout(processThumbQueue, 5);
+  }
+
+  if (stlCache[stlPath] || stlCache[item.stl]) {
+    renderThumb(stlCache[stlPath] || stlCache[item.stl]);
+  } else {
+    const loader = new THREE.STLLoader();
+    loader.load(stlPath, (geo) => {
+      stlCache[stlPath] = geo;
+      renderThumb(geo);
+    }, undefined, () => { thumbBusy = false; setTimeout(processThumbQueue, 5); });
+  }
+}
+
+
+// 3D Scene
+let scene3d, camera3d, renderer3d, controls3d;
+let stlCache = {};
+
+// ============== INIT ==============
+function init() {
+  const sel = document.getElementById('printer');
+  PRINTERS.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id; opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  sel.value = printer.id;
+  buildLibrary();
+  resizeCanvas();
+  window.addEventListener('resize', () => { resizeCanvas(); if (currentView === '3d') resize3D(); });
+  setupCanvasEvents();
+  setView('2d');
+}
+
+
+
+function buildLibrary() {
+  const lib = document.getElementById('component-lib');
+  lib.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const header = document.createElement('div');
+    header.className = 'cat-header';
+    header.innerHTML = `<span class="arrow">▼</span> ${cat.name} <span class="count">${cat.items.length}</span>`;
+    const items = document.createElement('div');
+    items.className = 'cat-items';
+    header.onclick = () => { header.classList.toggle('collapsed'); items.classList.toggle('hidden'); };
+    lib.appendChild(header);
+
+    cat.items.forEach(comp => {
+      const el = document.createElement('div');
+      el.className = 'comp-item';
+      el.dataset.name = comp.name.toLowerCase();
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.className = 'thumb';
+      thumbCanvas.width = 48; thumbCanvas.height = 48;
+      thumbCanvas.style.background = 'rgba(0,0,0,0.3)';
+      if (comp.stl) thumbQueue.push({ canvas: thumbCanvas, stl: comp.stl, color: cat.color, orient: comp.orient || 'flat' });
+
+      el.appendChild(thumbCanvas);
+      const info = document.createElement('div');
+      info.className = 'comp-info';
+      info.innerHTML = `<span class="comp-name" title="${comp.name}">${comp.name}</span><span class="dims">${comp.w}×${comp.h}mm</span>`;
+      el.appendChild(info);
+      el.onclick = () => addComponent(comp, cat.color);
+      items.appendChild(el);
+    });
+    lib.appendChild(items);
+  });
+  // Start rendering thumbnails
+  requestAnimationFrame(processThumbQueue);
+}
+
+function onSearch() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  document.querySelectorAll('.comp-item').forEach(el => {
+    el.classList.toggle('filtered-out', q && !el.dataset.name.includes(q));
+  });
+  if (q) {
+    document.querySelectorAll('.cat-header').forEach(h => {
+      const items = h.nextElementSibling;
+      const hasMatch = items.querySelector('.comp-item:not(.filtered-out)');
+      if (hasMatch) { h.classList.remove('collapsed'); items.classList.remove('hidden'); }
+      else { h.classList.add('collapsed'); items.classList.add('hidden'); }
+    });
+  }
+}
+
+// ============== VIEW SWITCHING ==============
+function setView(v) {
+  currentView = v;
+  document.getElementById('btn-2d').classList.toggle('btn-active', v === '2d');
+  document.getElementById('btn-3d').classList.toggle('btn-active', v === '3d');
+  document.getElementById('canvas').style.display = v === '2d' ? 'block' : 'none';
+  document.getElementById('view-3d').style.display = v === '3d' ? 'block' : 'none';
+  document.getElementById('canvas-info').textContent = v === '2d'
+    ? 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove'
+    : 'Drag: Orbit | Scroll: Zoom | Right-drag: Pan';
+  if (v === '2d') { resizeCanvas(); draw(); }
+  else { init3D(); build3DScene(); }
+}
+
+// ============== PRINTER ==============
+function onPrinterChange() {
+  printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
+  centerView(); draw();
+  if (currentView === '3d') build3DScene();
+}
+
+function centerView() {
+  const wrap = document.getElementById('canvas-wrap');
+  const cw = wrap.clientWidth, ch = wrap.clientHeight;
+  const sx = (cw - 120) / printer.w, sy = (ch - 120) / printer.h;
+  scale = Math.min(sx, sy, 3);
+  panX = (cw - printer.w * scale) / 2;
+  panY = (ch - printer.h * scale) / 2;
+}
+
+// ============== 2D COMPONENTS ==============
+function autoFitRotation(c) {
+  // Check if component extends past frame edges (with margin); if rotating 90° fits better, do it
+  const M = FRAME_MARGIN;
+  const b0 = getBounds(c);
+  const out0 = Math.max(0, b0.x + b0.w - (printer.w - M)) + Math.max(0, b0.y + b0.h - (printer.h - M)) + Math.max(0, M - b0.x) + Math.max(0, M - b0.y);
+  if (out0 <= 0) return; // already fits
+  const savedRot = c.rotation;
+  c.rotation = (c.rotation + 1) % 4;
+  // Re-center after rotation
+  const b1 = getBounds(c);
+  c.x = snap(b0.x + b0.w/2 - b1.w/2);
+  c.y = snap(b0.y + b0.h/2 - b1.h/2);
+  const b1b = getBounds(c);
+  const out1 = Math.max(0, b1b.x + b1b.w - (printer.w - M)) + Math.max(0, b1b.y + b1b.h - (printer.h - M)) + Math.max(0, M - b1b.x) + Math.max(0, M - b1b.y);
+  if (out1 >= out0) { c.rotation = savedRot; c.x = b0.x; c.y = b0.y; } // revert if not better
+}
+
+function clampToFrame(c, frameMargin = FRAME_MARGIN) {
+  console.log(`🔍 clampToFrame called with frameMargin: ${frameMargin}, component: ${c.name} at (${c.x}, ${c.y})`);
+  
+  // Skip cable ducts - they have their own placement logic and must never be moved
+  if (c.name.toLowerCase().includes('cable duct')) {
+    console.log(`⚡ Skipping cable duct ${c.name} - fixed position`);
+    return;
+  }
+  
+  // Use the passed frameMargin directly - SA algorithm already includes component spacing
+  const effectiveMargin = frameMargin;
+  console.log(`🔍 Using effectiveMargin: ${effectiveMargin} (frameMargin passed from SA already includes spacing)`);
+  
+  const b = getBounds(c);
+  const origX = c.x, origY = c.y;
+  
+  // Apply minimum bounds first - use snapUp to ensure we move away from the margin
+  if (b.x < effectiveMargin) {
+    const minX = effectiveMargin;
+    c.x = snapUp(c.x + (minX - b.x));
+  }
+  if (b.y < effectiveMargin) {
+    const minY = effectiveMargin; 
+    c.y = snapUp(c.y + (minY - b.y));
+  }
+  
+  // Check if component still fits within max bounds after minimum adjustment
+  const b2 = getBounds(c);
+  if (b2.x + b2.w > printer.w - effectiveMargin || b2.y + b2.h > printer.h - effectiveMargin) {
+    // Component extends past effective bounds - find closest valid position
+    console.log(`🔧 Component ${c.name} extends past bounds, adjusting to fit`);
+    
+    // Calculate how much to pull back (preserve original position as much as possible)
+    const maxX = printer.w - effectiveMargin - b.w;
+    const maxY = printer.h - effectiveMargin - b.h;
+    
+    if (maxX >= effectiveMargin && maxY >= effectiveMargin) {
+      // Component can fit - clamp to closest valid position
+      c.x = snapUp(Math.max(effectiveMargin, Math.min(c.x, maxX)));
+      c.y = snapUp(Math.max(effectiveMargin, Math.min(c.y, maxY)));
+      console.log(`📍 Clamped ${c.name} to closest valid position (${c.x}, ${c.y})`);
+    } else {
+      // Component too big for effective margins, use regular frame margins
+      console.log(`⚠️ ${c.name} too large for cable duct margins, using regular frame margins`);
+      const regMaxX = printer.w - FRAME_MARGIN - b.w;
+      const regMaxY = printer.h - FRAME_MARGIN - b.h;
+      c.x = snapUp(Math.max(FRAME_MARGIN, Math.min(c.x, regMaxX)));
+      c.y = snapUp(Math.max(FRAME_MARGIN, Math.min(c.y, regMaxY)));
+    }
+  } else {
+    // Component fits fine - no adjustment needed
+    console.log(`✅ Component ${c.name} fits within bounds at (${c.x}, ${c.y})`);
+  }
+  
+  console.log(`🔍 clampToFrame result: ${c.name} moved to (${c.x}, ${c.y})`);
+}
+
+function addComponent(comp, color) {
+  const c = {
+    id: nextId++, name: comp.name,
+    x: snap(printer.w / 2 - comp.w / 2), y: snap(printer.h / 2 - comp.h / 2),
+    w: comp.w, h: comp.h, rotation: 0, catColor: color, stl: comp.stl || '',
+    orient: comp.orient || 'flat',
+  };
+  autoFitRotation(c);
+  clampToFrame(c);
+  placed.push(c); selected = c;
+  updateBOM(); draw();
+  if (currentView === '3d') build3DScene();
+}
+
+function snap(v) {
+  // Snap to nearest hex grid position
+  return Math.round(v / HEX_SPACING) * HEX_SPACING;
+}
+
+function snapUp(v) {
+  // Snap to next higher hex grid position (ensures we move away from boundaries)
+  return Math.ceil(v / HEX_SPACING) * HEX_SPACING;
+}
+
+function removeSelected() {
+  if (!selected) return;
+  placed = placed.filter(c => c !== selected);
+  selected = null; updateBOM(); draw();
+  if (currentView === '3d') build3DScene();
+}
+
+// ============== 2D CANVAS ==============
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  cvs.width = wrap.clientWidth; cvs.height = wrap.clientHeight;
+  if (placed.length === 0) centerView();
+  draw();
+}
+
+function toCanvas(mx, my) { return { x: (mx - panX) / scale, y: (my - panY) / scale }; }
+
+function getBounds(c) {
+  if (c.rotation % 2 === 0) return { x: c.x, y: c.y, w: c.w, h: c.h };
+  return { x: c.x, y: c.y, w: c.h, h: c.w };
+}
+
+function hitTest(mx, my) {
+  const p = toCanvas(mx, my);
+  for (let i = placed.length - 1; i >= 0; i--) {
+    const b = getBounds(placed[i]);
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return placed[i];
+  }
+  return null;
+}
+
+function checkCollisions() {
+  for (const c of placed) c._col = false;
+  for (let i = 0; i < placed.length; i++) {
+    const a = getBounds(placed[i]);
+    for (let j = i + 1; j < placed.length; j++) {
+      const b = getBounds(placed[j]);
+      // Include padding around each component for cable duct clearance
+      if (a.x - COMP_PAD < b.x + b.w + COMP_PAD && a.x + a.w + COMP_PAD > b.x - COMP_PAD &&
+          a.y - COMP_PAD < b.y + b.h + COMP_PAD && a.y + a.h + COMP_PAD > b.y - COMP_PAD) {
+        placed[i]._col = true; placed[j]._col = true;
+      }
+    }
+  }
+}
+
+function drawHex(cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 3 * i - Math.PI / 6;
+    const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+function draw() {
+  if (currentView !== '2d') return;
+  const w = cvs.width, h = cvs.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(panX, panY);
+  ctx.scale(scale, scale);
+
+  // Frame bg
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, printer.w, printer.h);
+
+  // Hex grid — matches FT EMS standoff pattern (22mm center-to-center)
+  let col = 0;
+  for (let x = HEX_OFFSET_X; x <= printer.w - HEX_OFFSET_X; x += HEX_SPACING) {
+    const yOff = (col % 2 === 0) ? HEX_OFFSET_Y : HEX_OFFSET_Y + HEX_ROW / 2;
+    for (let y = yOff; y <= printer.h - HEX_OFFSET_Y; y += HEX_ROW) {
+      // Map from panel-bottom-origin to canvas-top-origin
+      const cy = printer.h - y;
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 0.3 / scale;
+      drawHex(x, cy, HEX_R);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath(); ctx.arc(x, cy, 1.0, 0, Math.PI * 2); ctx.fill();
+    }
+    col++;
+  }
+
+  // Frame border
+  ctx.strokeStyle = '#3a5a8a'; ctx.lineWidth = 2 / scale;
+  ctx.strokeRect(0, 0, printer.w, printer.h);
+
+  // Safe placement zone (frame margin)
+  ctx.strokeStyle = 'rgba(58,90,138,0.3)'; ctx.lineWidth = 0.5 / scale;
+  ctx.setLineDash([6/scale, 4/scale]);
+  ctx.strokeRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN*2, printer.h - FRAME_MARGIN*2);
+  ctx.setLineDash([]);
+
+  // Dimensions
+  ctx.fillStyle = '#4a6a9a'; ctx.font = `${10/scale}px sans-serif`; ctx.textAlign = 'center';
+  ctx.fillText(`${printer.w}mm`, printer.w/2, -5/scale);
+  ctx.save(); ctx.translate(-7/scale, printer.h/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText(`${printer.h}mm`, 0, 0); ctx.restore();
+
+
+
+  // Components
+  checkCollisions();
+  for (const c of placed) {
+    const b = getBounds(c), isSel = c === selected;
+    
+    // Use consistent coordinate system: getBounds() for ALL components (2D matches 3D)
+    // This ensures 2D and 3D views show identical layout
+    
+    // Padding zone (cable duct clearance)  
+    ctx.fillStyle = c._col ? 'rgba(233,69,96,0.08)' : 'rgba(255,255,255,0.03)';
+    ctx.fillRect(b.x - COMP_PAD, b.y - COMP_PAD, b.w + COMP_PAD*2, b.h + COMP_PAD*2);
+    ctx.strokeStyle = c._col ? 'rgba(233,69,96,0.25)' : 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 0.5 / scale;
+    ctx.setLineDash([3/scale, 3/scale]);
+    ctx.strokeRect(b.x - COMP_PAD, b.y - COMP_PAD, b.w + COMP_PAD*2, b.h + COMP_PAD*2);
+    ctx.setLineDash([]);
+    
+    // Component body
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(b.x+1.5/scale, b.y+1.5/scale, b.w, b.h);
+    ctx.fillStyle = c._col ? 'rgba(233,69,96,0.3)' : hexRgba(c.catColor, 0.25);
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = c._col ? '#e94560' : (isSel ? '#fff' : c.catColor);
+    ctx.lineWidth = (isSel ? 2.5 : 1) / scale;
+    ctx.setLineDash(isSel ? [4/scale, 3/scale] : []);
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.setLineDash([]);
+
+    // Mount holes
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    const m = 5;
+    for (const p of [[m,m],[b.w-m,m],[m,b.h-m],[b.w-m,b.h-m]]) {
+      ctx.beginPath(); ctx.arc(b.x+p[0], b.y+p[1], 1.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Lock indicator
+    if (c._locked) {
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = `${8/scale}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText('🔒', b.x + b.w - 2/scale, b.y + 2/scale);
+    }
+
+    // Label
+    ctx.fillStyle = '#eee';
+    const fs = Math.max(5, Math.min(9, Math.min(b.w, b.h)*0.18));
+    ctx.font = `${fs}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    wrapText(c.name, b.x+b.w/2, b.y+b.h/2, b.w-6, fs+1);
+  }
+  ctx.restore();
+}
+
+function wrapText(text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let lines = [], line = '';
+  for (const word of words) {
+    const test = line ? line+' '+word : word;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; }
+    else line = test;
+  }
+  lines.push(line);
+  const sy = y - (lines.length-1)*lineH/2;
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], x, sy+i*lineH);
+}
+
+function hexRgba(hex, a) {
+  return `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============== 2D EVENTS ==============
+function setupCanvasEvents() {
+  cvs.addEventListener('mousedown', onMouseDown);
+  cvs.addEventListener('mousemove', onMouseMove);
+  cvs.addEventListener('mouseup', onMouseUp);
+  cvs.addEventListener('wheel', onWheel, { passive: false });
+  cvs.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('keydown', onKey);
+}
+
+function onMouseDown(e) {
+  if (currentView !== '2d') return;
+  const rect = cvs.getBoundingClientRect();
+  const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    panning = true; panStart = { x: e.clientX-panX, y: e.clientY-panY };
+    cvs.style.cursor = 'grabbing'; e.preventDefault(); return;
+  }
+  if (e.button === 0) {
+    const hit = hitTest(mx, my);
+    if (hit) {
+      selected = hit;
+      const b = getBounds(hit), p = toCanvas(mx, my);
+      dragging = { comp: hit, offX: p.x-b.x, offY: p.y-b.y };
+      placed = placed.filter(c => c !== hit); placed.push(hit);
+    } else selected = null;
+    draw();
+  }
+}
+
+function onMouseMove(e) {
+  if (currentView !== '2d') return;
+  const rect = cvs.getBoundingClientRect();
+  const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+  if (panning) { panX = e.clientX-panStart.x; panY = e.clientY-panStart.y; draw(); return; }
+  if (dragging) {
+    const p = toCanvas(mx, my);
+    dragging.comp.x = snap(p.x - dragging.offX);
+    dragging.comp.y = snap(p.y - dragging.offY);
+    draw(); return;
+  }
+  cvs.style.cursor = hitTest(mx, my) ? 'move' : 'default';
+}
+
+function onMouseUp() {
+  if (dragging) {
+    clampToFrame(dragging.comp);
+    draw();
+    if (currentView === '3d') build3DScene();
+  }
+  panning = false; cvs.style.cursor = 'default'; dragging = null;
+}
+
+function onWheel(e) {
+  if (currentView !== '2d') return;
+  e.preventDefault();
+  const rect = cvs.getBoundingClientRect();
+  const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+  const old = scale;
+  scale = Math.min(Math.max(scale * (e.deltaY > 0 ? 0.9 : 1.1), 0.3), 8);
+  panX = mx - (mx - panX) * (scale / old);
+  panY = my - (my - panY) * (scale / old);
+  draw();
+}
+
+function onKey(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
+  else if (e.key === 'r' || e.key === 'R') {
+    if (selected) { selected.rotation = (selected.rotation+1)%4; clampToFrame(selected); draw(); if (currentView==='3d') build3DScene(); }
+  }
+  else if (e.key === 'Escape') { selected = null; draw(); }
+  else if (e.key === 'l' || e.key === 'L') {
+    if (selected) { selected._locked = !selected._locked; draw(); }
+  }
+  else if (e.key === 'd' || e.key === 'D') {
+    if (selected) {
+      const c = { ...selected, id: nextId++, x: selected.x+HEX_SPACING, y: selected.y+HEX_SPACING, _col: false };
+      clampToFrame(c);
+      placed.push(c); selected = c;
+      updateBOM(); draw(); if (currentView==='3d') build3DScene();
+    }
+  }
+}
+
+// ============== 3D VIEW ==============
+function init3D() {
+  if (renderer3d) { resize3D(); return; }
+  const container = document.getElementById('view-3d');
+  scene3d = new THREE.Scene();
+  scene3d.background = new THREE.Color(0x1a1a2e);
+
+  camera3d = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 5000);
+  camera3d.position.set(0, 400, 500);
+
+  renderer3d = new THREE.WebGLRenderer({ antialias: true });
+  renderer3d.setSize(container.clientWidth, container.clientHeight);
+  renderer3d.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(renderer3d.domElement);
+
+  controls3d = new THREE.OrbitControls(camera3d, renderer3d.domElement);
+  controls3d.enableDamping = true;
+  controls3d.dampingFactor = 0.1;
+
+  // Lights
+  scene3d.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const dl1 = new THREE.DirectionalLight(0xffffff, 0.7);
+  dl1.position.set(200, 400, 300); scene3d.add(dl1);
+  const dl2 = new THREE.DirectionalLight(0x6688cc, 0.3);
+  dl2.position.set(-200, 200, -100); scene3d.add(dl2);
+
+  animate3D();
+}
+
+function resize3D() {
+  if (!renderer3d) return;
+  const container = document.getElementById('view-3d');
+  camera3d.aspect = container.clientWidth / container.clientHeight;
+  camera3d.updateProjectionMatrix();
+  renderer3d.setSize(container.clientWidth, container.clientHeight);
+}
+
+function animate3D() {
+  requestAnimationFrame(animate3D);
+  if (currentView !== '3d' || !renderer3d) return;
+  controls3d.update();
+  renderer3d.render(scene3d, camera3d);
+}
+
+// ============== HARDWARE 3D MODELS ==============
+function createHardwareModel(c, b) {
+  const name = c.name.toLowerCase();
+  const cat = getCatId(c);
+
+  // Skip mounts, ducts, bolts — no hardware on these
+  if (cat === 'ducts' || cat === 'mounts' || cat === 'lids') return null;
+  if (name.includes('cable duct') || name.includes('lid ')) return null;
+  if (name.includes('mount a') || name.includes('mount b') || name.includes('mount c') ||
+      name.includes('mount d') || name.includes('mount e') || name.includes('mount f') ||
+      name.includes('bolt') || name.includes('bracket') || name.includes('din')) return null;
+
+  const group = new THREE.Group();
+
+  if (cat === 'mcu' || cat === 'exp') {
+    // === PCB Board ===
+    const pcbW = b.w * 0.85, pcbD = b.h * 0.85, pcbH = 1.6;
+    const pcb = new THREE.Mesh(
+      new THREE.BoxGeometry(pcbW, pcbH, pcbD),
+      new THREE.MeshPhongMaterial({ color: 0x1a5c1a, specular: 0x224422 })
+    );
+    pcb.position.y = pcbH / 2;
+    group.add(pcb);
+
+    // Main processor chip
+    const chipW = Math.min(pcbW * 0.25, 20), chipH = 3;
+    const chip = new THREE.Mesh(
+      new THREE.BoxGeometry(chipW, chipH, chipW),
+      new THREE.MeshPhongMaterial({ color: 0x222222, specular: 0x444444 })
+    );
+    chip.position.set(0, pcbH + chipH / 2, 0);
+    group.add(chip);
+
+    // Stepper driver sockets (for MCUs)
+    if (cat === 'mcu' && pcbW > 60) {
+      const driverCount = pcbW > 100 ? 8 : (pcbW > 80 ? 6 : 4);
+      const driverW = 8, driverD = 12, driverH = 10;
+      const spacing = (pcbW - 20) / driverCount;
+      for (let i = 0; i < driverCount; i++) {
+        const driver = new THREE.Mesh(
+          new THREE.BoxGeometry(driverW, driverH, driverD),
+          new THREE.MeshPhongMaterial({ color: 0x111111 })
+        );
+        driver.position.set(-pcbW/2 + 10 + i * spacing + spacing/2, pcbH + driverH/2, -pcbD/2 + driverD/2 + 4);
+        group.add(driver);
+        // Heatsink on top
+        const hs = new THREE.Mesh(
+          new THREE.BoxGeometry(driverW + 1, 3, driverD + 1),
+          new THREE.MeshPhongMaterial({ color: 0x8855cc })
+        );
+        hs.position.set(driver.position.x, pcbH + driverH + 1.5, driver.position.z);
+        group.add(hs);
+      }
+    }
+
+    // Connectors along edges
+    const connCount = Math.floor(pcbW / 15);
+    for (let i = 0; i < connCount; i++) {
+      const conn = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 6, 5),
+        new THREE.MeshPhongMaterial({ color: 0xeeeeee })
+      );
+      conn.position.set(-pcbW/2 + 10 + i * (pcbW / connCount), pcbH + 3, pcbD/2 - 4);
+      group.add(conn);
+    }
+
+    // USB connector
+    const usb = new THREE.Mesh(
+      new THREE.BoxGeometry(8, 4, 6),
+      new THREE.MeshPhongMaterial({ color: 0xaaaaaa, specular: 0x666666 })
+    );
+    usb.position.set(pcbW/2 - 6, pcbH + 2, 0);
+    group.add(usb);
+
+  } else if (cat === 'sbc') {
+    // === Single Board Computer (RPi style) ===
+    const pcbW = b.w * 0.85, pcbD = b.h * 0.85, pcbH = 1.6;
+    const pcb = new THREE.Mesh(
+      new THREE.BoxGeometry(pcbW, pcbH, pcbD),
+      new THREE.MeshPhongMaterial({ color: 0x1a5c1a })
+    );
+    pcb.position.y = pcbH / 2;
+    group.add(pcb);
+
+    // SoC chip
+    const soc = new THREE.Mesh(
+      new THREE.BoxGeometry(12, 2, 12),
+      new THREE.MeshPhongMaterial({ color: 0x333333, specular: 0x555555 })
+    );
+    soc.position.set(-5, pcbH + 1, 0);
+    group.add(soc);
+
+    // Ethernet port
+    const eth = new THREE.Mesh(
+      new THREE.BoxGeometry(16, 14, 16),
+      new THREE.MeshPhongMaterial({ color: 0xcccccc })
+    );
+    eth.position.set(pcbW/2 - 10, pcbH + 7, pcbD/2 - 10);
+    group.add(eth);
+
+    // USB ports
+    for (let i = 0; i < 2; i++) {
+      const usbPort = new THREE.Mesh(
+        new THREE.BoxGeometry(14, 16, 7),
+        new THREE.MeshPhongMaterial({ color: 0xcccccc })
+      );
+      usbPort.position.set(pcbW/2 - 10, pcbH + 8, -pcbD/2 + 12 + i * 18);
+      group.add(usbPort);
+    }
+
+    // GPIO header
+    const gpio = new THREE.Mesh(
+      new THREE.BoxGeometry(pcbW * 0.7, 8, 3),
+      new THREE.MeshPhongMaterial({ color: 0x222222 })
+    );
+    gpio.position.set(-5, pcbH + 4, -pcbD/2 + 3);
+    group.add(gpio);
+
+    // SD card slot
+    const sd = new THREE.Mesh(
+      new THREE.BoxGeometry(12, 2, 4),
+      new THREE.MeshPhongMaterial({ color: 0xaaaaaa })
+    );
+    sd.position.set(-pcbW/2 + 8, pcbH + 1, pcbD/2);
+    group.add(sd);
+
+  } else if (cat === 'can') {
+    // === Small CAN/USB board ===
+    const pcbW = b.w * 0.8, pcbD = b.h * 0.8, pcbH = 1.2;
+    const pcb = new THREE.Mesh(
+      new THREE.BoxGeometry(pcbW, pcbH, pcbD),
+      new THREE.MeshPhongMaterial({ color: 0x1a4c2a })
+    );
+    pcb.position.y = pcbH / 2;
+    group.add(pcb);
+
+    // Small chip
+    const chip = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 1.5, 6),
+      new THREE.MeshPhongMaterial({ color: 0x222222 })
+    );
+    chip.position.set(0, pcbH + 0.75, 0);
+    group.add(chip);
+
+    // USB-C connector
+    const usbc = new THREE.Mesh(
+      new THREE.BoxGeometry(9, 3.5, 4),
+      new THREE.MeshPhongMaterial({ color: 0xaaaaaa })
+    );
+    usbc.position.set(pcbW/2 - 5, pcbH + 1.75, 0);
+    group.add(usbc);
+
+    // Screw terminals
+    const term = new THREE.Mesh(
+      new THREE.BoxGeometry(pcbW * 0.5, 5, 4),
+      new THREE.MeshPhongMaterial({ color: 0x22aa44 })
+    );
+    term.position.set(-5, pcbH + 2.5, -pcbD/2 + 3);
+    group.add(term);
+
+  } else if (cat === 'psu') {
+    // === Power Supply ===
+    const psuW = b.w * 0.88, psuD = b.h * 0.88;
+    const psuH = name.includes('uhp') ? 25 : (name.includes('rs-25') ? 30 : 40);
+    const psu = new THREE.Mesh(
+      new THREE.BoxGeometry(psuW, psuH, psuD),
+      new THREE.MeshPhongMaterial({ color: 0xcccccc, specular: 0x888888, shininess: 60 })
+    );
+    psu.position.y = psuH / 2;
+    group.add(psu);
+
+    // Ventilation holes (top)
+    const ventGeo = new THREE.PlaneGeometry(psuW * 0.6, psuD * 0.5);
+    const ventMat = new THREE.MeshPhongMaterial({ color: 0x999999, side: THREE.DoubleSide });
+    const vent = new THREE.Mesh(ventGeo, ventMat);
+    vent.rotation.x = -Math.PI / 2;
+    vent.position.set(0, psuH + 0.1, 0);
+    group.add(vent);
+
+    // Terminal block (input/output)
+    const termW = psuW * 0.4;
+    const termBlock = new THREE.Mesh(
+      new THREE.BoxGeometry(termW, 8, 10),
+      new THREE.MeshPhongMaterial({ color: 0x333333 })
+    );
+    termBlock.position.set(-psuW/2 + termW/2 + 5, psuH + 4, psuD/2 - 8);
+    group.add(termBlock);
+
+    // Screw terminals (colored)
+    const termColors = [0xff0000, 0xff0000, 0x000000, 0xffcc00, 0xffcc00];
+    for (let i = 0; i < termColors.length; i++) {
+      const screw = new THREE.Mesh(
+        new THREE.CylinderGeometry(2, 2, 3, 8),
+        new THREE.MeshPhongMaterial({ color: termColors[i] })
+      );
+      screw.position.set(-psuW/2 + 10 + i * (termW / termColors.length), psuH + 9, psuD/2 - 8);
+      group.add(screw);
+    }
+
+    // Mean Well label
+    const labelGeo = new THREE.PlaneGeometry(psuW * 0.5, 10);
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 256; labelCanvas.height = 32;
+    const lctx = labelCanvas.getContext('2d');
+    lctx.fillStyle = '#dddddd';
+    lctx.fillRect(0, 0, 256, 32);
+    lctx.fillStyle = '#cc0000';
+    lctx.font = 'bold 22px sans-serif';
+    lctx.textAlign = 'center';
+    lctx.fillText('MEAN WELL', 128, 23);
+    const labelTex = new THREE.CanvasTexture(labelCanvas);
+    const labelMat = new THREE.MeshBasicMaterial({ map: labelTex });
+    const label = new THREE.Mesh(labelGeo, labelMat);
+    label.position.set(0, psuH / 2, psuD / 2 + 0.5);
+    group.add(label);
+
+  } else if (cat === 'fan') {
+    // === Fan ===
+    const fanSize = Math.min(b.w, b.h) * 0.85;
+    const fanH = fanSize < 50 ? 20 : 25;
+
+    // Fan housing
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(fanSize, fanH, fanSize),
+      new THREE.MeshPhongMaterial({ color: 0x222222 })
+    );
+    housing.position.y = fanH / 2;
+    group.add(housing);
+
+    // Fan grill (circular cutout effect)
+    const grillGeo = new THREE.RingGeometry(fanSize * 0.1, fanSize * 0.42, 32);
+    const grillMat = new THREE.MeshPhongMaterial({ color: 0x111111, side: THREE.DoubleSide });
+    const grill = new THREE.Mesh(grillGeo, grillMat);
+    grill.rotation.x = -Math.PI / 2;
+    grill.position.y = fanH + 0.5;
+    group.add(grill);
+
+    // Fan blades
+    const bladeCount = 7;
+    for (let i = 0; i < bladeCount; i++) {
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(fanSize * 0.35, 1, 4),
+        new THREE.MeshPhongMaterial({ color: 0x444444 })
+      );
+      blade.rotation.y = (i / bladeCount) * Math.PI;
+      blade.position.y = fanH + 0.5;
+      group.add(blade);
+    }
+
+    // Hub
+    const hub = new THREE.Mesh(
+      new THREE.CylinderGeometry(fanSize * 0.1, fanSize * 0.1, 3, 16),
+      new THREE.MeshPhongMaterial({ color: 0x555555 })
+    );
+    hub.position.y = fanH + 1;
+    group.add(hub);
+
+  } else if (cat === 'relay') {
+    // === SSR / Converter ===
+    if (name.includes('ssr')) {
+      const ssrW = b.w * 0.8, ssrD = b.h * 0.8, ssrH = 22;
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(ssrW, ssrH, ssrD),
+        new THREE.MeshPhongMaterial({ color: 0x222222 })
+      );
+      body.position.y = ssrH / 2;
+      group.add(body);
+
+      // LED indicator
+      const led = new THREE.Mesh(
+        new THREE.SphereGeometry(2, 8, 8),
+        new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0x440000 })
+      );
+      led.position.set(0, ssrH + 1, 0);
+      group.add(led);
+
+      // Terminal screws
+      for (let side = -1; side <= 1; side += 2) {
+        for (let i = 0; i < 2; i++) {
+          const screw = new THREE.Mesh(
+            new THREE.CylinderGeometry(2.5, 2.5, 4, 8),
+            new THREE.MeshPhongMaterial({ color: 0xaaaaaa })
+          );
+          screw.position.set(side * (ssrW/2 - 8), ssrH + 2, -ssrD/4 + i * ssrD/2);
+          group.add(screw);
+        }
+      }
+    } else {
+      // Buck/DC-DC converter
+      const convW = b.w * 0.75, convD = b.h * 0.75, convH = 10;
+      const pcb = new THREE.Mesh(
+        new THREE.BoxGeometry(convW, 1.2, convD),
+        new THREE.MeshPhongMaterial({ color: 0x0a3a8a })
+      );
+      pcb.position.y = 0.6;
+      group.add(pcb);
+
+      // Inductor coil
+      const coil = new THREE.Mesh(
+        new THREE.CylinderGeometry(5, 5, 6, 12),
+        new THREE.MeshPhongMaterial({ color: 0x444444 })
+      );
+      coil.position.set(0, 4.2, 0);
+      group.add(coil);
+
+      // Capacitor
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(3, 3, 8, 12),
+        new THREE.MeshPhongMaterial({ color: 0x222222 })
+      );
+      cap.position.set(convW/3, 5.2, 0);
+      group.add(cap);
+
+      // Potentiometer
+      const pot = new THREE.Mesh(
+        new THREE.CylinderGeometry(2, 2, 2, 12),
+        new THREE.MeshPhongMaterial({ color: 0x2266cc })
+      );
+      pot.position.set(-convW/3, 2.2, convD/4);
+      group.add(pot);
+    }
+  }
+
+  return group.children.length > 0 ? group : null;
+}
+
+function getCatId(c) {
+  for (const cat of CATEGORIES) {
+    for (const item of cat.items) {
+      if (item.name === c.name) return cat.id;
+    }
+  }
+  return '';
+}
+
+function build3DScene() {
+  if (!scene3d) return;
+  // Remove old dynamic objects
+  const toRemove = scene3d.children.filter(c => c.userData.dynamic);
+  toRemove.forEach(c => scene3d.remove(c));
+
+  const pw = printer.w, ph = printer.h;
+  const ox = -pw/2, oz = -ph/2; // center the frame
+  let frameTopY = 6; // default standoff height for fallback box
+
+  // Frame: use actual STL panels as the backplane (preserve native coordinates, center combined)
+  const frameStls = printer.frameStls;
+  if (frameStls && frameStls.length > 0) {
+    // Check all frame STLs are loaded first
+    let allLoaded = true;
+    frameStls.forEach(fs => { if (!stlCache[fs.stl]) allLoaded = false; });
+    if (!allLoaded) {
+      const fLoader = new THREE.STLLoader();
+      frameStls.forEach(fs => {
+        if (!stlCache[fs.stl]) {
+          fLoader.load(fs.stl, (geometry) => { stlCache[fs.stl] = geometry; build3DScene(); }, undefined, () => {});
+        }
+      });
+    }
+    // Clone all frame geometries preserving their native coordinates
+    const geoList = [];
+    frameStls.forEach(fs => {
+      if (!stlCache[fs.stl]) return;
+      const geo = stlCache[fs.stl].clone();
+      geo.computeBoundingBox();
+      geoList.push({ geo, stl: fs.stl });
+    });
+    // Detect and remap misaligned panels (exported at wrong coordinates)
+    if (geoList.length >= 3) {
+      // Step 1: Find outlier panels far from the majority
+      // Compute pairwise distances between panel centers to find the tight cluster
+      const centers = geoList.map(g => { const c = new THREE.Vector3(); g.geo.boundingBox.getCenter(c); return c; });
+      const panelSize = new THREE.Vector3(); geoList[0].geo.boundingBox.getSize(panelSize);
+      const expectedDist = Math.max(panelSize.x, panelSize.y) * 2.5; // panels should be within ~2 panel widths
+
+      // For each panel, count how many others are within expected distance
+      const neighbors = centers.map((c, i) => centers.filter((c2, j) => i !== j && c.distanceTo(c2) < expectedDist).length);
+      const outliers = [];
+      const goodPanels = [];
+      geoList.forEach((g, i) => {
+        if (neighbors[i] < 2) outliers.push(i); else goodPanels.push(i);
+      });
+
+      if (outliers.length > 0 && goodPanels.length >= 2) {
+        // Build reference box from good panels only
+        const refBox = new THREE.Box3();
+        goodPanels.forEach(i => refBox.union(geoList[i].geo.boundingBox));
+        const midX = (refBox.min.x + refBox.max.x) / 2;
+        const midY = (refBox.min.y + refBox.max.y) / 2;
+        // Find which quadrants are occupied by good panels
+        const quadrants = [[false,false],[false,false]];
+        goodPanels.forEach(i => {
+          const rc = centers[i];
+          quadrants[rc.x > midX ? 1 : 0][rc.y > midY ? 1 : 0] = true;
+        });
+        // Remap outliers to empty quadrants
+        outliers.forEach(oi => {
+          const geo = geoList[oi].geo;
+          const bb = geo.boundingBox;
+          for (let qx = 0; qx < 2; qx++) for (let qy = 0; qy < 2; qy++) {
+            if (!quadrants[qx][qy]) {
+              const tgtX = qx === 0 ? refBox.min.x : midX;
+              const tgtY = qy === 0 ? refBox.min.y : midY;
+              geo.translate(tgtX - bb.min.x, tgtY - bb.min.y, refBox.min.z - bb.min.z);
+              geo.computeBoundingBox();
+              quadrants[qx][qy] = true;
+              return;
+            }
+          }
+        });
+      }
+    }
+    if (geoList.length > 0) {
+      // Combined bounding box in native coords
+      const combined = new THREE.Box3();
+      geoList.forEach(g => combined.union(g.geo.boundingBox));
+      const combCenter = new THREE.Vector3();
+      combined.getCenter(combCenter);
+      const combSize = new THREE.Vector3();
+      combined.getSize(combSize);
+      // Build a group with all panels at native coords, then transform group once
+      const frameGroup = new THREE.Group();
+      const frameMat = new THREE.MeshPhongMaterial({ color: 0x222838, specular: 0x111111, shininess: 20 });
+      geoList.forEach(g => {
+        const mesh = new THREE.Mesh(g.geo, frameMat);
+        frameGroup.add(mesh);
+      });
+      // Center the group at the combined center
+      frameGroup.position.set(-combCenter.x, -combCenter.y, -combCenter.z);
+      // Wrap in outer group to rotate around world origin after centering
+      const frameWrapper = new THREE.Group();
+      frameWrapper.add(frameGroup);
+      // Rotate so thinnest native axis → Y (up): native is ~470x470x68
+      const dims = [{a:'x',v:combSize.x},{a:'y',v:combSize.y},{a:'z',v:combSize.z}].sort((a,b)=>a.v-b.v);
+      if (dims[0].a === 'z') frameWrapper.rotation.x = -Math.PI/2;
+      else if (dims[0].a === 'x') frameWrapper.rotation.z = -Math.PI/2;
+      else if (dims[0].a === 'y') { /* already correct */ }
+      frameWrapper.userData.dynamic = true;
+      scene3d.add(frameWrapper);
+      // Compute frame surface Y: hex pattern is 4mm from bottom of frame STL
+      frameWrapper.updateMatrixWorld(true);
+      const frameWorldBox = new THREE.Box3().setFromObject(frameWrapper);
+      // Thick frames (Trident with posts): hex surface is 4mm from bottom
+      // Thin frames (V2.4, Micron, Doom): top surface is max.y
+      const frameThickness = frameWorldBox.max.y - frameWorldBox.min.y;
+      frameTopY = frameThickness > 20 ? frameWorldBox.min.y + 4 : frameWorldBox.max.y;
+    }
+  } else {
+    // Fallback: simple box frame
+    const frameGeo = new THREE.BoxGeometry(pw, 3, ph);
+    const frameMat = new THREE.MeshPhongMaterial({ color: 0x111820, transparent: true, opacity: 0.9 });
+    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+    frameMesh.position.set(0, -1.5, 0);
+    frameMesh.userData.dynamic = true;
+    scene3d.add(frameMesh);
+    // Frame border wireframe
+    const edges = new THREE.EdgesGeometry(frameGeo);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x3a5a8a });
+    const wireframe = new THREE.LineSegments(edges, lineMat);
+    wireframe.position.copy(frameMesh.position);
+    wireframe.userData.dynamic = true;
+    scene3d.add(wireframe);
+  }
+
+  // Hex standoff dots — only for printers without frame STLs (STL panels have hex pattern built in)
+  if (!frameStls || frameStls.length === 0) {
+    const dotGeo = new THREE.CylinderGeometry(1.5, 1.5, 6, 6);
+    const dotMat = new THREE.MeshPhongMaterial({ color: 0x445566 });
+    let col3d = 0;
+    for (let x = HEX_OFFSET_X; x <= pw - HEX_OFFSET_X; x += HEX_SPACING) {
+      const yOff = (col3d % 2 === 0) ? HEX_OFFSET_Y : HEX_OFFSET_Y + HEX_ROW / 2;
+      for (let z = yOff; z <= ph - HEX_OFFSET_Y; z += HEX_ROW) {
+        const dot = new THREE.Mesh(dotGeo, dotMat);
+        dot.position.set(ox + x, 3, oz + (ph - z));
+        dot.userData.dynamic = true;
+        scene3d.add(dot);
+      }
+      col3d++;
+    }
+  }
+
+  // Place components
+  for (const c of placed) {
+    const b = getBounds(c);
+    const color = new THREE.Color(c.catColor);
+
+    // Target position: anchor at the 2D component's grid-snapped corner
+    const anchorX = ox + b.x;
+    const anchorZ = oz + b.y;
+    const standoffH = frameTopY; // place components on top of frame
+
+    if (c.stl && stlCache[c.stl]) {
+      const srcGeo = stlCache[c.stl];
+      const geo = srcGeo.clone();
+      const mat = new THREE.MeshPhongMaterial({ color, specular: 0x333333, shininess: 40 });
+
+      // Center geometry at origin
+      geo.computeBoundingBox();
+      const ctr = new THREE.Vector3();
+      geo.boundingBox.getCenter(ctr);
+      geo.translate(-ctr.x, -ctr.y, -ctr.z);
+
+      // Step 1: Orient flat
+      if (c.orient === 'upright' || c.orient === 'zflat') {
+        geo.rotateX(-Math.PI / 2);
+      } else {
+        geo.computeBoundingBox();
+        const sz0 = new THREE.Vector3();
+        geo.boundingBox.getSize(sz0);
+        const dims = [
+          { axis: 'y', val: sz0.y },
+          { axis: 'x', val: sz0.x },
+          { axis: 'z', val: sz0.z },
+        ];
+        dims.sort((a, b) => a.val - b.val);
+        const thin = dims[0];
+        if (thin.axis === 'x') geo.rotateZ(Math.PI / 2);
+        else if (thin.axis === 'z') geo.rotateX(Math.PI / 2);
+        // Flip face-up (mounts default to face-down after thinnest-axis rotation)
+        geo.rotateX(Math.PI);
+        // Fan mount: stand vertical
+        if (c.stl && c.stl.endsWith('ft-4010-fan-mount.stl')) {
+          geo.rotateX(Math.PI / 2);
+        }
+      }
+
+      // Step 2: Apply user rotation
+      if (c.rotation) {
+        geo.rotateY(-c.rotation * Math.PI / 2);
+      }
+
+      // Step 3: Re-center
+      geo.computeBoundingBox();
+      const ctr2 = new THREE.Vector3();
+      geo.boundingBox.getCenter(ctr2);
+      geo.translate(-ctr2.x, -ctr2.y, -ctr2.z);
+      geo.computeBoundingBox();
+
+      const mesh = new THREE.Mesh(geo, mat);
+      const bMin = geo.boundingBox.min;
+      const bMax = geo.boundingBox.max;
+      const stlW = bMax.x - bMin.x, stlD = bMax.z - bMin.z;
+      // Center STL within the 2D component bounds
+      mesh.position.set(
+        anchorX + b.w/2 - (bMin.x + stlW/2),
+        standoffH - bMin.y,
+        anchorZ + b.h/2 - (bMin.z + stlD/2)
+      );
+      mesh.userData.dynamic = true;
+      scene3d.add(mesh);
+    } else {
+      // Fallback: colored box
+      const compH = 12;
+      const geo = new THREE.BoxGeometry(b.w, compH, b.h);
+      const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.7 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(anchorX + b.w/2, standoffH + compH / 2, anchorZ + b.h/2);
+      mesh.userData.dynamic = true;
+      scene3d.add(mesh);
+      const edgeGeo = new THREE.EdgesGeometry(geo);
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+      const edgeMesh = new THREE.LineSegments(edgeGeo, edgeMat);
+      edgeMesh.position.copy(mesh.position);
+      edgeMesh.userData.dynamic = true;
+      scene3d.add(edgeMesh);
+      // Try loading STL async
+      if (c.stl && !stlCache[c.stl]) {
+        const loader = new THREE.STLLoader();
+        loader.load(c.stl, (geometry) => {
+          stlCache[c.stl] = geometry;
+          build3DScene();
+        }, undefined, () => {});
+      }
+    }
+
+    // Component label (sprite)
+    const spCanvas = document.createElement('canvas');
+    spCanvas.width = 256; spCanvas.height = 64;
+    const spCtx = spCanvas.getContext('2d');
+    spCtx.fillStyle = 'rgba(0,0,0,0.6)';
+    spCtx.roundRect(0, 0, 256, 64, 8); spCtx.fill();
+    spCtx.fillStyle = '#ffffff';
+    spCtx.font = 'bold 20px sans-serif';
+    spCtx.textAlign = 'center';
+    spCtx.fillText(c.name, 128, 40);
+    const tex = new THREE.CanvasTexture(spCanvas);
+    const spMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const sprite = new THREE.Sprite(spMat);
+    sprite.position.set(anchorX + b.w/2, 45, anchorZ + b.h/2);
+    const labelW = Math.max(b.w, 50) * 0.8;
+    sprite.scale.set(labelW, labelW * 0.25, 1);
+    sprite.userData.dynamic = true;
+    scene3d.add(sprite);
+  }
+
+  // Point camera at center
+  controls3d.target.set(0, 0, 0);
+  camera3d.position.set(pw * 0.6, pw * 0.8, pw * 0.9);
+  controls3d.update();
+}
+
+// ============== BOM ==============
+function updateBOM() {
+  const list = document.getElementById('bom-list');
+  const total = document.getElementById('bom-total');
+  if (placed.length === 0) {
+    list.innerHTML = '<div id="bom-empty">No components placed</div>';
+    total.textContent = ''; return;
+  }
+  const counts = {};
+  for (const c of placed) counts[c.name] = (counts[c.name] || 0) + 1;
+  list.innerHTML = Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))
+    .map(([n,c]) => `<div class="bom-item"><span>${n}</span><span class="bom-count">×${c}</span></div>`).join('');
+  total.textContent = `Total: ${placed.length} component${placed.length !== 1 ? 's' : ''}`;
+}
+
+// ============== PRINTABLE CHECKLIST ==============
+function showChecklist() {
+  if (placed.length === 0) { alert('No components to list!'); return; }
+  const counts = {};
+  const stls = {};
+  for (const c of placed) {
+    counts[c.name] = (counts[c.name] || 0) + 1;
+    if (c.stl) stls[c.name] = c.stl;
+  }
+  const printerName = PRINTERS.find(p => p.id === printer.id).name;
+  const rows = Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))
+    .map(([name, count]) => `
+      <tr>
+        <td class="check-col">☐</td>
+        <td>${escapeHtml(name)}</td>
+        <td style="text-align:center">${count}</td>
+        <td style="font-size:10px;color:var(--text-dim)">${escapeHtml(stls[name] || '')}</td>
+      </tr>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h2>🖨 FT EMS Parts Checklist</h2>
+      <p style="margin-bottom:12px;color:var(--text-dim)">Printer: <strong>${printerName}</strong> | ${placed.length} total components</p>
+      <table>
+        <thead><tr><th class="check-col">✓</th><th>Component</th><th style="text-align:center">Qty</th><th>STL File</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:12px;padding:8px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:12px;color:var(--text-dim)">
+        <strong>EMS Hardware (per mount point):</strong> M3×8 SHCS + M3 hex standoff + heat set insert<br>
+        <strong>Tip:</strong> Print mounts in ABS/ASA for heat resistance
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="window.print()">🖨 Print</button>
+        <button class="btn" onclick="exportChecklistCSV()">📄 CSV</button>
+        <button class="btn btn-danger" onclick="this.closest('.modal-overlay').remove()">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+function exportChecklistCSV() {
+  const counts = {};
+  const stls = {};
+  for (const c of placed) {
+    counts[c.name] = (counts[c.name] || 0) + 1;
+    if (c.stl) stls[c.name] = c.stl;
+  }
+  let csv = 'Component,Quantity,STL File\n';
+  for (const [name, count] of Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))) {
+    csv += `"${name}",${count},"${stls[name] || ''}"\n`;
+  }
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ft-ems-checklist-${printer.id}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ============== SAVE/LOAD/EXPORT ==============
+function saveLayout() {
+  const data = {
+    version: 4, printer: printer.id,
+
+    components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, catColor: c.catColor, stl: c.stl, orient: c.orient || 'flat', locked: c._locked || false })),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ft-ems-layout-${printer.id}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+function loadLayout() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.printer) {
+          const p = PRINTERS.find(pr => pr.id === data.printer);
+          if (p) { printer = p; document.getElementById('printer').value = p.id; }
+        }
+
+        placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
+        selected = null; updateBOM(); centerView(); draw();
+        if (currentView === '3d') build3DScene();
+      } catch { alert('Invalid layout file'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function clearLayout() {
+  if (placed.length && !confirm('Clear all components?')) return;
+  placed = []; selected = null; updateBOM(); draw();
+  if (currentView === '3d') build3DScene();
+}
+
+function exportImage() {
+  if (currentView === '3d') {
+    // Export 3D screenshot
+    renderer3d.render(scene3d, camera3d);
+    const a = document.createElement('a');
+    a.href = renderer3d.domElement.toDataURL('image/png');
+    a.download = `ft-ems-3d-${printer.id}.png`;
+    a.click();
+    return;
+  }
+  // 2D export
+  const pad = 50, es = 3;
+  const ec = document.createElement('canvas');
+  const ew = (printer.w+pad*2)*es, eh = (printer.h+pad*2+20)*es;
+  ec.width = ew; ec.height = eh;
+  const ex = ec.getContext('2d');
+  ex.fillStyle = '#1a1a2e'; ex.fillRect(0, 0, ew, eh);
+  ex.fillStyle = '#e94560'; ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
+  ex.fillText(`FT EMS — ${PRINTERS.find(p=>p.id===printer.id).name}`, pad*es*0.4, 20*es);
+  ex.save(); ex.translate(pad*es, (pad+10)*es); ex.scale(es, es);
+  ex.fillStyle = '#0d1117'; ex.fillRect(0, 0, printer.w, printer.h);
+  // Hex dots
+  ex.fillStyle = 'rgba(255,255,255,0.1)';
+  for (let x = 0; x <= printer.w; x += HEX_SPACING) {
+    for (let y = 0; y <= printer.h; y += HEX_SPACING) {
+      ex.beginPath(); ex.arc(x, y, 0.8, 0, Math.PI*2); ex.fill();
+    }
+  }
+  ex.strokeStyle = '#3a5a8a'; ex.lineWidth = 1.5; ex.strokeRect(0, 0, printer.w, printer.h);
+  for (const c of placed) {
+    const b = getBounds(c);
+    ex.fillStyle = hexRgba(c.catColor, 0.3); ex.fillRect(b.x, b.y, b.w, b.h);
+    ex.strokeStyle = c.catColor; ex.lineWidth = 1; ex.strokeRect(b.x, b.y, b.w, b.h);
+    ex.fillStyle = '#eee';
+    const fs = Math.max(5, Math.min(8, Math.min(b.w, b.h)*0.16));
+    ex.font = `${fs}px sans-serif`; ex.textAlign = 'center'; ex.textBaseline = 'middle';
+    // Simple label for export
+    const label = c.name.length > 20 ? c.name.substring(0, 18) + '…' : c.name;
+    ex.fillText(label, b.x+b.w/2, b.y+b.h/2);
+  }
+  ex.restore();
+  const a = document.createElement('a');
+  a.href = ec.toDataURL('image/png');
+  a.download = `ft-ems-layout-${printer.id}.png`;
+  a.click();
+}
+
+// ============== SUGGEST LAYOUT WIZARD ==============
+function showSuggestLayout() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  const printerName = PRINTERS.find(p => p.id === printer.id)?.name || printer.id;
+  let catHtml = '';
+  CATEGORIES.forEach((cat, ci) => {
+    let itemsHtml = '';
+    cat.items.forEach((item, ii) => {
+      itemsHtml += `
+        <label class="wizard-item" data-name="${item.name.toLowerCase()}">
+          <input type="checkbox" data-cat="${ci}" data-item="${ii}">
+          <span class="wi-name">${item.name}</span>
+          <span class="wi-dims">${item.w}×${item.h}mm</span>
+          <span class="wi-quantity">
+            <input type="number" class="qty-input" data-cat="${ci}" data-item="${ii}" min="1" max="20" value="1" onclick="event.stopPropagation();">
+          </span>
+        </label>`;
+    });
+    catHtml += `
+      <div class="wizard-cat">
+        <div class="wizard-cat-header" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.classList.toggle('hidden');">
+          <span class="arrow">▼</span>
+          <span class="wizard-cat-name" style="color: ${cat.color}">${cat.name}</span>
+          <span style="font-size:10px;color:var(--text-dim)">${cat.items.length}</span>
+          <div class="wizard-cat-actions">
+            <button onclick="event.stopPropagation(); wizardToggleCat(${ci}, true)">All</button>
+            <button onclick="event.stopPropagation(); wizardToggleCat(${ci}, false)">None</button>
+          </div>
+        </div>
+        <div class="wizard-items">${itemsHtml}</div>
+      </div>`;
+  });
+
+  overlay.innerHTML = `
+    <div class="modal wizard-modal">
+      <h2>✨ Suggest Layout</h2>
+      <div class="wizard-printer">Printer: <strong>${printerName}</strong> (${printer.w}×${printer.h}mm)</div>
+      <input class="wizard-search" type="text" placeholder="🔍 Search components..." oninput="wizardFilter(this.value)">
+      <div class="wizard-cats">${catHtml}</div>
+      <div class="wizard-footer">
+        <span class="wizard-count"><strong id="wizard-sel-count">0</strong> components selected</span>
+        <button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn" style="background: var(--highlight);" onclick="runSuggestLayout(this.closest('.wizard-modal')); this.closest('.modal-overlay').remove();">🚀 Generate Layout</button>
+      </div>
+    </div>`;
+
+  // Remove any existing wizard first
+  document.querySelectorAll('.modal-overlay').forEach(el => el.remove());
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  // Track checkbox and quantity changes for count
+  function updateComponentCount() {
+    let totalComponents = 0;
+    overlay.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+      const ci = parseInt(cb.dataset.cat);
+      const ii = parseInt(cb.dataset.item);
+      const qtyInput = overlay.querySelector(`.qty-input[data-cat="${ci}"][data-item="${ii}"]`);
+      const quantity = parseInt(qtyInput?.value) || 1;
+      totalComponents += quantity;
+    });
+    document.getElementById('wizard-sel-count').textContent = totalComponents;
+  }
+  
+  overlay.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updateComponentCount);
+  });
+  
+  overlay.querySelectorAll('.qty-input').forEach(input => {
+    input.addEventListener('input', updateComponentCount);
+  });
+}
+
+function wizardToggleCat(catIndex, checked) {
+  document.querySelectorAll(`.wizard-item input[data-cat="${catIndex}"]`).forEach(cb => {
+    if (!cb.closest('.wizard-item').classList.contains('filtered-out')) {
+      cb.checked = checked;
+    }
+  });
+  const count = document.querySelectorAll('.wizard-modal input[type="checkbox"]:checked').length;
+  document.getElementById('wizard-sel-count').textContent = count;
+}
+
+function wizardFilter(query) {
+  const q = query.toLowerCase().trim();
+  document.querySelectorAll('.wizard-item').forEach(el => {
+    el.classList.toggle('filtered-out', q && !el.dataset.name.includes(q));
+  });
+}
+
+function runSuggestLayout(modal) {
+  // Gather checked components with quantities, separating ducts from regular components
+  const checkedComps = [];
+  const checkedDucts = [];
+  
+  (modal || document).querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+    const ci = parseInt(cb.dataset.cat);
+    const ii = parseInt(cb.dataset.item);
+    if (isNaN(ci) || isNaN(ii) || ci < 0 || ci >= CATEGORIES.length) return;
+    const cat = CATEGORIES[ci];
+    if (!cat || !cat.items || ii < 0 || ii >= cat.items.length) return;
+    const item = cat.items[ii];
+    
+    // Find the quantity input for this component
+    const qtyInput = (modal || document).querySelector(`.qty-input[data-cat="${ci}"][data-item="${ii}"]`);
+    const quantity = parseInt(qtyInput?.value) || 1;
+    
+    // Add multiple copies based on quantity
+    for (let q = 0; q < quantity; q++) {
+      const compData = { comp: item, color: cat.color, catId: cat.id };
+      if (cat.id === 'ducts') {
+        checkedDucts.push(compData);
+      } else {
+        checkedComps.push(compData);
+      }
+    }
+  });
+
+  if (checkedComps.length === 0 && checkedDucts.length === 0) return;
+
+  console.log(`Running SA layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
+
+  let placedComponents = [];
+  
+  // Phase 1: Place regular components using SA with cable duct awareness
+  if (checkedComps.length > 0) {
+    // Calculate required edge margin for cable ducts
+    const hasLDucts = checkedDucts.some(d => d.comp.name.toLowerCase().includes('cable duct l'));
+    const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN; // Cable duct margin + component padding
+    
+    console.log(`Cable duct aware SA: reserving ${reservedMargin}mm edge margin (cable duct margin: ${CABLE_DUCT_MARGIN}mm + padding: ${COMP_PAD}mm, base: ${FRAME_MARGIN}mm)`);
+    
+    // Use reserved margin for component placement
+    const seededComponents = seedPlacement(checkedComps, reservedMargin);
+    placedComponents = deterministicGridPlacement(seededComponents, printer.w, printer.h, reservedMargin);
+    
+    placed.push(...placedComponents);
+  }
+
+  // Phase 2: Place cable ducts around/between components
+  if (checkedDucts.length > 0) {
+    const ductComponents = placeCableDucts(checkedDucts, placedComponents);
+    placed.push(...ductComponents);
+  }
+  
+  selected = null;
+  updateBOM();
+  draw();
+  if (currentView === '3d') build3DScene();
+
+  // Show result notification  
+  const totalPlaced = placedComponents.length + (checkedDucts.length > 0 ? checkedDucts.length : 0);
+  console.log(`Layout complete: placed ${totalPlaced} components`);
+}
+
+
+
+
+
+
+
+
+function getCatIdForComp(compName) {
+  for (const cat of CATEGORIES) {
+    for (const item of cat.items) {
+      if (item.name === compName) return cat.id;
+    }
+  }
+  return 'other';
+}
+
+// ============== MAXRECTS BIN PACKER ==============
+class MaxRectsPacker {
+  constructor(width, height) {
+    this.binW = width;
+    this.binH = height;
+    this.freeRects = [{ x: 0, y: 0, w: width, h: height }];
+  }
+
+  insert(w, h) {
+    let bestScore1 = Infinity, bestScore2 = Infinity;
+    let bestX = 0, bestY = 0, bestRot = false, found = false;
+
+    for (const fr of this.freeRects) {
+      // Normal orientation
+      if (w <= fr.w && h <= fr.h) {
+        const s1 = Math.min(fr.w - w, fr.h - h);
+        const s2 = Math.max(fr.w - w, fr.h - h);
+        if (s1 < bestScore1 || (s1 === bestScore1 && s2 < bestScore2)) {
+          bestX = fr.x; bestY = fr.y; bestScore1 = s1; bestScore2 = s2; bestRot = false; found = true;
+        }
+      }
+      // Rotated
+      if (h <= fr.w && w <= fr.h) {
+        const s1 = Math.min(fr.w - h, fr.h - w);
+        const s2 = Math.max(fr.w - h, fr.h - w);
+        if (s1 < bestScore1 || (s1 === bestScore1 && s2 < bestScore2)) {
+          bestX = fr.x; bestY = fr.y; bestScore1 = s1; bestScore2 = s2; bestRot = true; found = true;
+        }
+      }
+    }
+    if (!found) return null;
+
+    const pw = bestRot ? h : w, ph = bestRot ? w : h;
+    const placed = { x: bestX, y: bestY, w: pw, h: ph };
+
+    // Split all intersecting free rects
+    const newFree = [];
+    for (let i = this.freeRects.length - 1; i >= 0; i--) {
+      const fr = this.freeRects[i];
+      if (!(placed.x >= fr.x + fr.w || placed.x + placed.w <= fr.x || placed.y >= fr.y + fr.h || placed.y + placed.h <= fr.y)) {
+        if (placed.x > fr.x) newFree.push({ x: fr.x, y: fr.y, w: placed.x - fr.x, h: fr.h });
+        if (placed.x + placed.w < fr.x + fr.w) newFree.push({ x: placed.x + placed.w, y: fr.y, w: fr.x + fr.w - placed.x - placed.w, h: fr.h });
+        if (placed.y > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: placed.y - fr.y });
+        if (placed.y + placed.h < fr.y + fr.h) newFree.push({ x: fr.x, y: placed.y + placed.h, w: fr.w, h: fr.y + fr.h - placed.y - placed.h });
+        this.freeRects.splice(i, 1);
+      }
+    }
+    this.freeRects.push(...newFree);
+    // Prune contained rects
+    for (let i = 0; i < this.freeRects.length; i++) {
+      for (let j = i + 1; j < this.freeRects.length; j++) {
+        const a = this.freeRects[i], b = this.freeRects[j];
+        if (b.x <= a.x && b.y <= a.y && b.x + b.w >= a.x + a.w && b.y + b.h >= a.y + a.h) {
+          this.freeRects.splice(i, 1); i--; break;
+        }
+        if (a.x <= b.x && a.y <= b.y && a.x + a.w >= b.x + b.w && a.y + a.h >= b.y + b.h) {
+          this.freeRects.splice(j, 1); j--;
+        }
+      }
+    }
+    return { x: bestX, y: bestY, w, h, rotated: bestRot };
+  }
+}
+
+// ============== PLACEMENT UTILITIES ==============
+
+
+function hexGridSnapWithCheck(x, y, w, h, rotation, existingPlacements) {
+  const rw = rotation % 2 === 0 ? w : h;
+  const rh = rotation % 2 === 0 ? h : w;
+  // Try nearest snap, then nearby alternatives
+  const candidates = [];
+  const baseX = snap(x), baseY = snap(y);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      candidates.push({ x: baseX + dx * HEX_SPACING, y: baseY + dy * HEX_SPACING });
+    }
+  }
+  // Sort by distance from original position
+  candidates.sort((a, b) => {
+    const da = Math.abs(a.x - x) + Math.abs(a.y - y);
+    const db = Math.abs(b.x - x) + Math.abs(b.y - y);
+    return da - db;
+  });
+  for (const c of candidates) {
+    let overlap = false;
+    for (const p of existingPlacements) {
+      const pb = getBounds(p);
+      if (c.x < pb.x + pb.w + COMP_PAD && c.x + rw + COMP_PAD > pb.x &&
+          c.y < pb.y + pb.h + COMP_PAD && c.y + rh + COMP_PAD > pb.y) {
+        overlap = true; break;
+      }
+    }
+    if (!overlap) return c;
+  }
+  return { x: baseX, y: baseY }; // fallback
+}
+
+// ============== SIMULATED ANNEALING PLACEMENT ==============
+
+/**
+ * Score a layout based on multiple weighted penalties
+ * @param {Array} components - Array of placed components
+ * @return {number} Score (lower = better)
+ */
+function scoreLayout(components) {
+  const w = SA_WEIGHTS;
+  let overlapPenalty = 0;
+  let thermalPenalty = 0;
+  let cableRoutingCost = 0;
+  let distributionPenalty = 0;
+  let accessPenalty = 0;
+
+  // 🚨 NUCLEAR ANTI-CLUSTERING: REWARD spreading, PUNISH clustering
+  const centers = components.map(c => ({ x: c.x + c.w/2, y: c.y + c.h/2 }));
+  
+  // Calculate minimum inter-component distances
+  let minDistanceSum = 0;
+  for (let i = 0; i < centers.length; i++) {
+    let minDist = Infinity;
+    for (let j = 0; j < centers.length; j++) {
+      if (i !== j) {
+        const dist = Math.sqrt((centers[i].x - centers[j].x)**2 + (centers[i].y - centers[j].y)**2);
+        minDist = Math.min(minDist, dist);
+      }
+    }
+    if (minDist !== Infinity) minDistanceSum += minDist;
+  }
+  
+  // 🚀 NUCLEAR AMPLIFICATION: Make anti-clustering penalty DOMINATE all other factors!
+  // Ensure minimum distance > 50 to prevent mathematical overflow from co-located components
+  const safeMinDistance = Math.max(minDistanceSum, 50);
+  distributionPenalty = centers.length > 1 ? (50000000 / safeMinDistance) : 0;
+  
+  // EXTRA: Add massive penalty for any components at identical positions
+  let identicalPositionPenalty = 0;
+  for (let i = 0; i < centers.length; i++) {
+    for (let j = i + 1; j < centers.length; j++) {
+      const dist = Math.sqrt((centers[i].x - centers[j].x)**2 + (centers[i].y - centers[j].y)**2);
+      if (dist < 5) { // Virtually identical positions
+        identicalPositionPenalty += 100000000; // MASSIVE penalty for identical placement
+      }
+    }
+  }
+  
+  distributionPenalty += identicalPositionPenalty;
+  console.log(`💥 NUCLEAR ANTI-CLUSTER: minDistSum=${minDistanceSum.toFixed(1)}, safeDist=${safeMinDistance.toFixed(1)}, penalty=${distributionPenalty.toFixed(0)}, identical=${identicalPositionPenalty}`);
+
+  // Check all pairs of components
+  for (let i = 0; i < components.length; i++) {
+    const compA = components[i];
+    const boundsA = getBounds(compA);
+    
+    for (let j = i + 1; j < components.length; j++) {
+      const compB = components[j];
+      const boundsB = getBounds(compB);
+      
+      // Distance between centers
+      const centerDist = Math.sqrt(
+        Math.pow(boundsA.x + boundsA.w/2 - boundsB.x - boundsB.w/2, 2) +
+        Math.pow(boundsA.y + boundsA.h/2 - boundsB.y - boundsB.h/2, 2)
+      );
+
+      // 1. Overlap penalty (HARD constraint)
+      if (boundsA.x - COMP_PAD < boundsB.x + boundsB.w + COMP_PAD &&
+          boundsA.x + boundsA.w + COMP_PAD > boundsB.x - COMP_PAD &&
+          boundsA.y - COMP_PAD < boundsB.y + boundsB.h + COMP_PAD &&
+          boundsA.y + boundsA.h + COMP_PAD > boundsB.y - COMP_PAD) {
+        
+        // Calculate overlap area
+        const overlapW = Math.min(boundsA.x + boundsA.w + COMP_PAD, boundsB.x + boundsB.w + COMP_PAD) - 
+                        Math.max(boundsA.x - COMP_PAD, boundsB.x - COMP_PAD);
+        const overlapH = Math.min(boundsA.y + boundsA.h + COMP_PAD, boundsB.y + boundsB.h + COMP_PAD) - 
+                        Math.max(boundsA.y - COMP_PAD, boundsB.y - COMP_PAD);
+        overlapPenalty += overlapW * overlapH;
+      }
+
+      // 2. Thermal penalty - hot components too close
+      const heatA = getComponentHeat(compA);
+      const heatB = getComponentHeat(compB);
+      if (heatA >= 5 || heatB >= 5) {
+        thermalPenalty += (heatA * heatB) / Math.max(centerDist * centerDist, 100); // Avoid div by zero
+      }
+
+      // 3. Cable routing cost - connected components prefer proximity
+      const connectionStrength = getConnectionStrength(compA, compB);
+      if (connectionStrength > 0) {
+        const manhattanDist = Math.abs(boundsA.x + boundsA.w/2 - boundsB.x - boundsB.w/2) + 
+                             Math.abs(boundsA.y + boundsA.h/2 - boundsB.y - boundsB.h/2);
+        cableRoutingCost += manhattanDist * connectionStrength;
+      }
+
+      // 4. Accessibility penalty - service sides blocked
+      accessPenalty += calculateAccessPenalty(compA, compB, centerDist);
+    }
+  }
+
+  return w.overlap * overlapPenalty + 
+         w.thermal * thermalPenalty + 
+         w.cableRouting * cableRoutingCost + 
+         w.distribution * distributionPenalty + 
+         w.accessibility * accessPenalty;
+}
+
+/**
+ * Get heat value for a component
+ */
+function getComponentHeat(comp) {
+  // Try to find the component in CATEGORIES to get its heat value
+  for (const cat of CATEGORIES) {
+    const item = cat.items.find(it => it.name === comp.name);
+    if (item && item.heat !== undefined) return item.heat;
+  }
+  return 0; // Default to no heat
+}
+
+/**
+ * Get connection strength between two components
+ */
+function getConnectionStrength(compA, compB) {
+  const catA = getComponentCategoryId(compA);
+  const catB = getComponentCategoryId(compB);
+  
+  for (const [patternA, patternB, strength] of CONNECTION_RULES) {
+    // Check if components match the connection rule (both directions)
+    if ((matchesPattern(compA.name, catA, patternA) && matchesPattern(compB.name, catB, patternB)) ||
+        (matchesPattern(compA.name, catA, patternB) && matchesPattern(compB.name, catB, patternA))) {
+      return strength;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Get category ID for a component
+ */
+function getComponentCategoryId(comp) {
+  for (const cat of CATEGORIES) {
+    if (cat.items.find(it => it.name === comp.name)) {
+      return cat.id;
+    }
+  }
+  return '';
+}
+
+/**
+ * Check if component matches a pattern (category ID or name substring)
+ */
+function matchesPattern(compName, catId, pattern) {
+  return catId === pattern || compName.toLowerCase().includes(pattern.toLowerCase());
+}
+
+/**
+ * Calculate accessibility penalty between two components
+ */
+function calculateAccessPenalty(compA, compB, centerDist) {
+  if (centerDist > 30) return 0; // Too far to block access
+  
+  const serviceA = getComponentServiceSide(compA);
+  const serviceB = getComponentServiceSide(compB);
+  
+  if (!serviceA && !serviceB) return 0;
+  
+  let penalty = 0;
+  
+  // Check if compB blocks compA's service side
+  if (serviceA && serviceA !== null) {
+    const blocking = isServiceSideBlocked(compA, compB, serviceA);
+    if (blocking) penalty += 10;
+  }
+  
+  // Check if compA blocks compB's service side  
+  if (serviceB && serviceB !== null) {
+    const blocking = isServiceSideBlocked(compB, compA, serviceB);
+    if (blocking) penalty += 10;
+  }
+  
+  return penalty;
+}
+
+/**
+ * Get service side for a component
+ */
+function getComponentServiceSide(comp) {
+  for (const cat of CATEGORIES) {
+    const item = cat.items.find(it => it.name === comp.name);
+    if (item && item.serviceSide !== undefined) return item.serviceSide;
+  }
+  return null;
+}
+
+/**
+ * Check if service side is blocked by another component
+ */
+function isServiceSideBlocked(comp, blocker, serviceSide) {
+  const compBounds = getBounds(comp);
+  const blockerBounds = getBounds(blocker);
+  
+  const compCenter = { x: compBounds.x + compBounds.w/2, y: compBounds.y + compBounds.h/2 };
+  const blockerCenter = { x: blockerBounds.x + blockerBounds.w/2, y: blockerBounds.y + blockerBounds.h/2 };
+  
+  switch (serviceSide) {
+    case 'top':
+      return blockerCenter.y < compCenter.y && Math.abs(blockerCenter.x - compCenter.x) < (compBounds.w/2 + blockerBounds.w/2);
+    case 'bottom':
+      return blockerCenter.y > compCenter.y && Math.abs(blockerCenter.x - compCenter.x) < (compBounds.w/2 + blockerBounds.w/2);
+    case 'left':
+      return blockerCenter.x < compCenter.x && Math.abs(blockerCenter.y - compCenter.y) < (compBounds.h/2 + blockerBounds.h/2);
+    case 'right':
+      return blockerCenter.x > compCenter.x && Math.abs(blockerCenter.y - compCenter.y) < (compBounds.h/2 + blockerBounds.h/2);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Initial seed placement using domain knowledge
+ */
+function seedPlacement(components, frameMargin = FRAME_MARGIN) {
+  console.log(`🔍 ANTI-CLUSTERING SEEDING ACTIVE - frameMargin: ${frameMargin}, components: ${components.length}`);
+  const result = [];
+  const remaining = [...components];
+  
+  // FORCE DISTRIBUTION: Create a grid of forced positions
+  const availableW = printer.w - frameMargin * 2;
+  const availableH = printer.h - frameMargin * 2;
+  const gridCols = 4; // Force 4x3 distribution grid
+  const gridRows = 3;
+  const cellW = availableW / gridCols;
+  const cellH = availableH / gridRows;
+  
+  console.log(`🎯 FORCED GRID: ${gridCols}x${gridRows}, cellSize: ${cellW.toFixed(0)}×${cellH.toFixed(0)}`);
+  
+  // Create forced placement positions (distributed across the frame)
+  const forcedPositions = [];
+  for (let row = 0; row < gridRows; row++) {
+    for (let col = 0; col < gridCols; col++) {
+      forcedPositions.push({
+        x: frameMargin + col * cellW + Math.random() * (cellW * 0.3), // Add some randomness within cell
+        y: frameMargin + row * cellH + Math.random() * (cellH * 0.3),
+        used: false
+      });
+    }
+  }
+  
+  // Shuffle positions to prevent predictable placement
+  for (let i = forcedPositions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [forcedPositions[i], forcedPositions[j]] = [forcedPositions[j], forcedPositions[i]];
+  }
+  
+  // Sort: largest area first, then by placement hint priority
+  remaining.sort((a, b) => {
+    const hintA = getComponentPlacementHint(a.comp);
+    const hintB = getComponentPlacementHint(b.comp);
+    const priorityA = hintA ? getPriorityForHint(hintA) : 99;
+    const priorityB = hintB ? getPriorityForHint(hintB) : 99;
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    return (b.comp.w * b.comp.h) - (a.comp.w * a.comp.h); // larger first within same priority
+  });
+  
+  const pad = COMP_PAD;
+  
+  // Helper: check if position overlaps any already-placed component (including padding)
+  function overlapsAny(x, y, w, h) {
+    for (const p of result) {
+      const pb = getBounds(p);
+      if (x - pad < pb.x + pb.w + pad && x + w + pad > pb.x - pad &&
+          y - pad < pb.y + pb.h + pad && y + h + pad > pb.y - pad) {
+        return true;
+      }
+    }
+    return false;
+  }
+  
+  // ANTI-CLUSTERING: Find next forced position that fits the component
+  function findForcedPosition(w, h) {
+    // First try to find an unused forced position that can fit this component
+    for (const pos of forcedPositions) {
+      if (pos.used) continue;
+      
+      // Check if component fits within frame margins when placed at this position
+      const finalX = Math.max(frameMargin, Math.min(pos.x, printer.w - frameMargin - w));
+      const finalY = Math.max(frameMargin, Math.min(pos.y, printer.h - frameMargin - h));
+      
+      if (!overlapsAny(finalX, finalY, w, h)) {
+        pos.used = true;
+        console.log(`🎯 FORCED POSITION: component ${w}×${h} → (${finalX.toFixed(0)}, ${finalY.toFixed(0)})`);
+        return { x: snap(finalX), y: snap(finalY) };
+      }
+    }
+    
+    // Fallback: try to place anywhere that doesn't overlap (but warn about clustering)
+    console.warn(`⚠️ NO FORCED POSITION AVAILABLE for ${w}×${h} - using fallback (may cluster)`);
+    for (let attempts = 0; attempts < 100; attempts++) {
+      const x = frameMargin + Math.random() * (printer.w - frameMargin * 2 - w);
+      const y = frameMargin + Math.random() * (printer.h - frameMargin * 2 - h);
+      const snapX = snap(x);
+      const snapY = snap(y);
+      
+      if (!overlapsAny(snapX, snapY, w, h)) {
+        return { x: snapX, y: snapY };
+      }
+    }
+    
+    return { x: frameMargin, y: frameMargin }; // last resort
+  }
+  
+  const frameW = printer.w - frameMargin * 2;
+  const frameH = printer.h - frameMargin * 2;
+  console.log(`🔍 seedPlacement using frameMargin: ${frameMargin}, frameW: ${frameW}, frameH: ${frameH}`);
+  
+  for (const item of remaining) {
+    const comp = item.comp;
+    const hint = getComponentPlacementHint(comp);
+    let targetX, targetY;
+    
+    switch (hint) {
+      case 'top-left':
+        // Mains power (AC inlet area)
+        targetX = frameMargin;
+        targetY = frameMargin;
+        break;
+      case 'top-left-near':
+        // Low voltage distribution (adjacent to mains)
+        const maxNearRange = Math.max(0, Math.min(150, frameW * 0.3));
+        targetX = frameMargin + Math.random() * maxNearRange;
+        targetY = frameMargin;
+        break;
+      case 'bottom':
+        targetX = comp.w <= frameW ? frameMargin + Math.random() * (frameW - comp.w) : printer.w / 2 - comp.w / 2;
+        targetY = printer.h - frameMargin - comp.h;
+        break;
+      case 'top':
+        targetX = comp.w <= frameW ? frameMargin + Math.random() * (frameW - comp.w) : printer.w / 2 - comp.w / 2;
+        targetY = frameMargin;
+        break;
+      case 'left':
+        targetX = frameMargin;
+        targetY = comp.h <= frameH ? frameMargin + Math.random() * (frameH - comp.h) : printer.h / 2 - comp.h / 2;
+        break;
+      case 'right':
+        targetX = printer.w - frameMargin - comp.w;
+        targetY = comp.h <= frameH ? frameMargin + Math.random() * (frameH - comp.h) : printer.h / 2 - comp.h / 2;
+        break;
+      case 'center':
+        targetX = printer.w / 2 - comp.w / 2;
+        targetY = printer.h / 2 - comp.h / 2;
+        break;
+      default:
+        // Check if component fits in available frame space
+        if (comp.w <= frameW && comp.h <= frameH) {
+          // Component fits - use random placement within frame
+          targetX = frameMargin + Math.random() * (frameW - comp.w);
+          targetY = frameMargin + Math.random() * (frameH - comp.h);
+        } else {
+          // Component too large for cable duct margins - seed with regular frame margins instead
+          const regularFrameW = printer.w - FRAME_MARGIN * 2;
+          const regularFrameH = printer.h - FRAME_MARGIN * 2;
+          if (comp.w <= regularFrameW && comp.h <= regularFrameH) {
+            console.log(`🎯 Component ${comp.name} (${comp.w}×${comp.h}mm) too large for ${frameMargin}mm margins - seeding with ${FRAME_MARGIN}mm margins in ${regularFrameW}×${regularFrameH}mm space`);
+            targetX = FRAME_MARGIN + Math.random() * (regularFrameW - comp.w);
+            targetY = FRAME_MARGIN + Math.random() * (regularFrameH - comp.h);
+          } else {
+            // Still too large even for regular margins - use center placement
+            console.warn(`Component ${comp.name} (${comp.w}×${comp.h}mm) too large for printer (${printer.w}×${printer.h}mm) - using center placement`);
+            targetX = printer.w / 2 - comp.w / 2;
+            targetY = printer.h / 2 - comp.h / 2;
+          }
+        }
+        break;
+    }
+    
+    const pos = findForcedPosition(comp.w, comp.h);
+    
+    const newComp = {
+      id: nextId++,
+      name: comp.name,
+      x: pos.x,
+      y: pos.y,
+      w: comp.w,
+      h: comp.h,
+      rotation: 0,
+      catColor: item.color,
+      stl: comp.stl || '',
+      orient: comp.orient || 'flat',
+      _locked: false,
+      _col: false,
+    };
+    
+    result.push(newComp);
+  }
+  
+  return result;
+}
+
+/**
+ * Get placement hint for a component
+ */
+function getComponentPlacementHint(comp) {
+  for (const cat of CATEGORIES) {
+    const item = cat.items.find(it => it.name === comp.name);
+    if (item && item.placementHint !== undefined) return item.placementHint;
+  }
+  return null;
+}
+
+/**
+ * Get priority for placement hint (lower = place first)
+ */
+function getPriorityForHint(hint) {
+  switch (hint) {
+    case 'top-left': return 1;      // Mains power first (AC inlet area)  
+    case 'top-left-near': return 2; // Low voltage distribution second
+    case 'center': return 3;        // MCUs, SBCs third (consumers)
+    case 'bottom': return 4;        // Legacy PSUs
+    case 'top': return 5;
+    case 'left': return 5;
+    case 'right': return 5;
+    default: return 99;             // No hint = place last
+  }
+}
+
+/**
+ * 🚀 DETERMINISTIC GRID PLACEMENT (REPLACES SA INSANITY)
+ */
+function deterministicGridPlacement(componentsList, frameWidth, frameHeight, margin) {
+  console.log(`🎯 DETERMINISTIC GRID PLACEMENT with ${componentsList.length} components`);
+  const startTime = Date.now();
+  
+  if (componentsList.length === 0) return [];
+  
+  const usableWidth = frameWidth - 2 * margin;
+  const usableHeight = frameHeight - 2 * margin;
+  const minSpacing = 20; // Minimum spacing between components (reduced from 45)
+  
+  // Sort components by size (largest first) for better packing
+  const sortedComponents = [...componentsList].sort((a, b) => (b.w * b.h) - (a.w * a.h));
+  
+  const placedComponents = [];
+  
+  for (const comp of sortedComponents) {
+    let bestPosition = null;
+    let minWastedSpace = Infinity;
+    
+    // Try placing at multiple candidate positions
+    const candidates = generateCandidatePositions(comp, margin, usableWidth, usableHeight, placedComponents);
+    
+    for (const pos of candidates) {
+      // Check if this position is valid (no overlaps with existing components)
+      if (isPositionValidForComponents(pos.x, pos.y, comp.w, comp.h, placedComponents, minSpacing)) {
+        // Calculate "wasted space" metric (distance from edges + empty space created)
+        const wastedSpace = calculateWastedSpace(pos.x, pos.y, comp.w, comp.h, margin, usableWidth, usableHeight);
+        
+        if (wastedSpace < minWastedSpace) {
+          bestPosition = pos;
+          minWastedSpace = wastedSpace;
+        }
+      }
+    }
+    
+    if (bestPosition) {
+      // Place the component
+      placedComponents.push({
+        ...comp,
+        x: bestPosition.x,
+        y: bestPosition.y,
+      });
+      
+      console.log(`✅ Placed ${comp.name} at (${bestPosition.x}, ${bestPosition.y})`);
+    } else {
+      console.log(`❌ Could not place ${comp.name} - no valid positions found`);
+      // Fallback: place at margin with overlap (better than nothing)
+      placedComponents.push({
+        ...comp,
+        x: margin,
+        y: margin + placedComponents.length * 50, // Stack vertically as fallback
+      });
+    }
+  }
+  
+  console.log(`🎯 GRID PLACEMENT: ${placedComponents.length}/${componentsList.length} placed, time=${Date.now() - startTime}ms`);
+  
+  return placedComponents;
+}
+
+function generateCandidatePositions(comp, margin, usableWidth, usableHeight, placedComponents) {
+  const candidates = [];
+  const step = 15; // Grid step size (finer grid for more placement options)
+  
+  // Add corner positions first (usually good)
+  candidates.push(
+    { x: margin, y: margin }, // Top-left
+    { x: margin + usableWidth - comp.w, y: margin }, // Top-right
+    { x: margin, y: margin + usableHeight - comp.h }, // Bottom-left
+    { x: margin + usableWidth - comp.w, y: margin + usableHeight - comp.h }, // Bottom-right
+  );
+  
+  // Add edge positions
+  for (let x = margin; x <= margin + usableWidth - comp.w; x += step) {
+    candidates.push({ x, y: margin }); // Top edge
+    candidates.push({ x, y: margin + usableHeight - comp.h }); // Bottom edge
+  }
+  
+  for (let y = margin; y <= margin + usableHeight - comp.h; y += step) {
+    candidates.push({ x: margin, y }); // Left edge
+    candidates.push({ x: margin + usableWidth - comp.w, y }); // Right edge
+  }
+  
+  // Add positions adjacent to existing components (good packing)
+  for (const existing of placedComponents) {
+    const b = getBounds(existing);
+    // Right of existing component
+    if (b.x + b.w + comp.w <= margin + usableWidth) {
+      candidates.push({ x: b.x + b.w + 20, y: b.y }); // 20mm gap
+    }
+    // Below existing component  
+    if (b.y + b.h + comp.h <= margin + usableHeight) {
+      candidates.push({ x: b.x, y: b.y + b.h + 20 }); // 20mm gap
+    }
+  }
+  
+  // Filter out obviously invalid positions
+  return candidates.filter(pos => 
+    pos.x >= margin && 
+    pos.y >= margin && 
+    pos.x + comp.w <= margin + usableWidth && 
+    pos.y + comp.h <= margin + usableHeight
+  );
+}
+
+function isPositionValidForComponents(x, y, width, height, placedComponents, minSpacing) {
+  // Check against all existing placed components
+  for (const existing of placedComponents) {
+    const b = getBounds(existing);
+    
+    // Check overlap with spacing buffer
+    if (x - minSpacing < b.x + b.w + minSpacing && 
+        x + width + minSpacing > b.x - minSpacing &&
+        y - minSpacing < b.y + b.h + minSpacing && 
+        y + height + minSpacing > b.y - minSpacing) {
+      return false; // Overlap detected
+    }
+  }
+  
+  return true; // No overlaps
+}
+
+function calculateWastedSpace(x, y, width, height, margin, usableWidth, usableHeight) {
+  // Prefer positions closer to edges and corners (less wasted space)
+  const distFromLeft = x - margin;
+  const distFromTop = y - margin;
+  const distFromRight = (margin + usableWidth) - (x + width);
+  const distFromBottom = (margin + usableHeight) - (y + height);
+  
+  // Weighted distance - corners are best, then edges, then interior
+  const edgeScore = Math.min(distFromLeft, distFromRight) + Math.min(distFromTop, distFromBottom);
+  
+  return edgeScore;
+}
+
+/**
+ * LEGACY: Simulated annealing optimization (REPLACED BY DETERMINISTIC GRID)
+ */
+function annealLayout(components, iterations = 3000, frameMargin = FRAME_MARGIN) {
+  console.log(`🔍 annealLayout called with frameMargin: ${frameMargin}, default FRAME_MARGIN: ${FRAME_MARGIN}`);
+  const startTime = Date.now();
+  const coolingRate = 0.997;
+  
+  const unlockedComponents = components.filter(c => !c._locked);
+  const lockedComponents = components.filter(c => c._locked);
+  
+  if (unlockedComponents.length === 0) return components;
+  
+  // Calculate initial temperature based on initial score so SA can actually explore
+  let currentScore = scoreLayout(components);
+  let T = Math.max(currentScore * 0.1, 500); // Start hot enough to escape local minima
+  const minT = 0.1;
+  
+  let bestScore = currentScore;
+  let bestLayout = JSON.parse(JSON.stringify(unlockedComponents));
+  
+  for (let i = 0; i < iterations; i++) {
+    if (T < minT) break;
+    
+    // Pick random unlocked component
+    const compIndex = Math.floor(Math.random() * unlockedComponents.length);
+    const comp = unlockedComponents[compIndex];
+    
+    // Store original state
+    const origX = comp.x;
+    const origY = comp.y;
+    const origR = comp.rotation;
+    
+    // Track swap partner for proper revert
+    let swapPartner = null;
+    let swapOrigX, swapOrigY;
+    
+    // Generate random move — shift range shrinks as temperature drops
+    const moveType = Math.random();
+    const moveScale = Math.max(10, 60 * (T / (bestScore * 0.1 || 500))); // shrink moves as we cool
+    
+    if (moveType < 0.75) {
+      // Translation (75%) - respect margins for cable ducts
+      const effectiveMargin = frameMargin; // SA already calculated proper margin including spacing
+      const b = getBounds(comp);
+      let minX = effectiveMargin;
+      let maxX = printer.w - effectiveMargin - b.w;
+      let minY = effectiveMargin; 
+      let maxY = printer.h - effectiveMargin - b.h;
+      
+      // Fix impossible bounds for oversized components - use regular frame margins as fallback
+      if (maxX < minX || maxY < minY) {
+        console.log(`⚠️ Component ${comp.name} too large for ${effectiveMargin}mm margins, using ${FRAME_MARGIN}mm margins for SA`);
+        minX = FRAME_MARGIN;
+        maxX = printer.w - FRAME_MARGIN - b.w;
+        minY = FRAME_MARGIN;
+        maxY = printer.h - FRAME_MARGIN - b.h;
+      }
+      
+      if (comp.name.includes('UHP-350') || comp.name.includes('LDO Nitehawk USB (TI)')) {
+        console.log(`🔧 SA bounds for ${comp.name}: effectiveMargin=${effectiveMargin}, size=${b.w}×${b.h}, Y bounds=${minY} to ${maxY}`);
+      }
+      
+      comp.x = snap(Math.max(minX, Math.min(maxX, comp.x + (Math.random() - 0.5) * moveScale * 2)));
+      comp.y = snap(Math.max(minY, Math.min(maxY, comp.y + (Math.random() - 0.5) * moveScale * 2)));
+    } else if (moveType < 0.9) {
+      // Swap positions with another random component (15%)
+      if (unlockedComponents.length > 1) {
+        let ni = compIndex;
+        while (ni === compIndex) ni = Math.floor(Math.random() * unlockedComponents.length);
+        swapPartner = unlockedComponents[ni];
+        swapOrigX = swapPartner.x;
+        swapOrigY = swapPartner.y;
+        const tx = comp.x, ty = comp.y;
+        comp.x = swapPartner.x; comp.y = swapPartner.y;
+        swapPartner.x = tx; swapPartner.y = ty;
+        clampToFrame(swapPartner, frameMargin);
+        
+        // Apply bounds to swapped positions (swaps can bypass margin constraints)
+        const effectiveMargin = frameMargin; // SA already calculated proper margin including spacing
+        if (comp.x < effectiveMargin || comp.y < effectiveMargin || 
+            swapPartner.x < effectiveMargin || swapPartner.y < effectiveMargin) {
+          // Revert swap if it violates cable duct margins
+          comp.x = origX; comp.y = origY;
+          swapPartner.x = swapOrigX; swapPartner.y = swapOrigY;
+          swapPartner = null; // mark as reverted
+        }
+      }
+    } else {
+      // Rotation (10%)
+      comp.rotation = (comp.rotation + 1) % 4;
+    }
+    
+    // Clamp to frame (final safety check)
+    clampToFrame(comp, frameMargin);
+    
+    const newScore = scoreLayout(components);
+    const delta = newScore - currentScore;
+    
+    const accept = delta < 0 || Math.random() < Math.exp(-delta / T);
+    
+    if (accept) {
+      currentScore = newScore;
+      if (newScore < bestScore) {
+        bestScore = newScore;
+        bestLayout = JSON.parse(JSON.stringify(unlockedComponents));
+      }
+    } else {
+      // Revert
+      comp.x = origX;
+      comp.y = origY;
+      comp.rotation = origR;
+      if (swapPartner) {
+        swapPartner.x = swapOrigX;
+        swapPartner.y = swapOrigY;
+      }
+    }
+    
+    T *= coolingRate;
+  }
+  
+  console.log(`SA: ${iterations} iters, best=${bestScore.toFixed(0)}, time=${Date.now() - startTime}ms`);
+  
+  // Restore best layout found
+  for (let i = 0; i < unlockedComponents.length; i++) {
+    Object.assign(unlockedComponents[i], bestLayout[i]);
+  }
+  return components;
+}
+
+/**
+ * Place cable ducts along edges and between component gaps
+ */
+function placeCableDucts(ductList, existingComponents) {
+  const result = [];
+  const usedSpots = new Set(); // Track used positions to avoid overlaps
+  
+  // Calculate the same reserved margin that SA used for component placement  
+  const hasLDucts = ductList.some(d => d.comp.name.toLowerCase().includes('cable duct l'));
+  const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN;
+  
+  console.log(`Cable duct placement using ${reservedMargin}mm margin (same as SA used for components)`);
+  
+  // Helper: check if duct position overlaps any existing component or other duct
+  function isSpotFree(x, y, w, h) {
+    const key = `${Math.round(x/5)},${Math.round(y/5)}`; // 5mm grid for fast lookup
+    if (usedSpots.has(key)) return false;
+    
+    // Check against existing components (use getBounds for position, but check against visual bounds)
+    for (const comp of existingComponents) {
+      const b = getBounds(comp);
+      if (x - COMP_PAD < b.x + b.w + COMP_PAD && x + w + COMP_PAD > b.x - COMP_PAD &&
+          y - COMP_PAD < b.y + b.h + COMP_PAD && y + h + COMP_PAD > b.y - COMP_PAD) {
+        console.log(`❌ Duct position (${x},${y},${w}×${h}) overlaps existing component ${comp.name} at (${b.x},${b.y},${b.w}×${b.h})`);
+        return false;
+      }
+    }
+    
+    // Check against other placed ducts in this session
+    for (const existingDuct of result) {
+      const db = getBounds(existingDuct);
+      if (x - COMP_PAD < db.x + db.w + COMP_PAD && x + w + COMP_PAD > db.x - COMP_PAD &&
+          y - COMP_PAD < db.y + db.h + COMP_PAD && y + h + COMP_PAD > db.y - COMP_PAD) {
+        console.log(`❌ Duct position (${x},${y},${w}×${h}) overlaps existing duct ${existingDuct.name} at (${db.x},${db.y},${db.w}×${db.h})`);
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  function markSpotUsed(x, y, w, h) {
+    // Mark a 2x2 grid area as used for this duct
+    for (let gx = Math.floor(x/5); gx <= Math.floor((x+w)/5); gx++) {
+      for (let gy = Math.floor(y/5); gy <= Math.floor((y+h)/5); gy++) {
+        usedSpots.add(`${gx},${gy}`);
+      }
+    }
+  }
+  
+  // Sort ducts: longest first for better space utilization
+  const sortedDucts = [...ductList].sort((a, b) => (b.comp.w * b.comp.h) - (a.comp.w * a.comp.h));
+  
+  for (const ductData of sortedDucts) {
+    const duct = ductData.comp;
+    let placed = false;
+    
+    // Check if this is an L-shaped (corner) duct
+    const isLShaped = duct.name.toLowerCase().includes('cable duct l');
+    console.log(`Processing duct: ${duct.name}, isLShaped: ${isLShaped}`);
+    
+    // Strategy 1: L-shaped ducts ONLY go in corners, never on edges
+    if (isLShaped) {
+      const cornerPositions = [
+        { x: FRAME_MARGIN, y: FRAME_MARGIN, rotation: 3, label: 'top-left' },   // Top-left: 270° to hug corner  
+        { x: printer.w - FRAME_MARGIN - duct.w, y: FRAME_MARGIN, rotation: 0, label: 'top-right' }, // Top-right: 0° to hug corner
+        { x: printer.w - FRAME_MARGIN - duct.w, y: printer.h - FRAME_MARGIN - duct.h, rotation: 1, label: 'bottom-right' }, // Bottom-right: 90° to hug corner
+        { x: FRAME_MARGIN, y: printer.h - FRAME_MARGIN - duct.h, rotation: 2, label: 'bottom-left' }, // Bottom-left: 180° to hug corner
+      ];
+      
+      for (const corner of cornerPositions) {
+        console.log(`Trying corner ${corner.label} at (${corner.x}, ${corner.y}) for L-duct ${duct.w}×${duct.h}`);
+        console.log(`Frame: ${printer.w}×${printer.h}, FRAME_MARGIN: ${FRAME_MARGIN}, reservedMargin: ${reservedMargin}`);
+        
+        // Debug: check what's actually in that corner area
+        let blockingItems = [];
+        for (const comp of existingComponents) {
+          const b = getBounds(comp);
+          if (corner.x - COMP_PAD < b.x + b.w + COMP_PAD && corner.x + duct.w + COMP_PAD > b.x - COMP_PAD &&
+              corner.y - COMP_PAD < b.y + b.h + COMP_PAD && corner.y + duct.h + COMP_PAD > b.y - COMP_PAD) {
+            blockingItems.push(`${comp.name} at (${b.x},${b.y},${b.w}×${b.h})`);
+          }
+        }
+        if (blockingItems.length > 0) {
+          console.log(`❌ Corner ${corner.label} blocked by: ${blockingItems.join(', ')}`);
+        }
+        
+        if (isSpotFree(corner.x, corner.y, duct.w, duct.h)) {
+          const newDuct = {
+            id: nextId++,
+            name: duct.name,
+            x: snap(corner.x),
+            y: snap(corner.y),
+            w: duct.w,
+            h: duct.h,
+            rotation: corner.rotation,
+            catColor: ductData.color,
+            stl: duct.stl || '',
+            orient: duct.orient || 'flat',
+            _locked: false,
+            _col: false,
+          };
+          result.push(newDuct);
+          markSpotUsed(corner.x, corner.y, duct.w, duct.h);
+          console.log(`✅ Placed L-duct ${duct.name} at ${corner.label} with rotation ${corner.rotation}`);
+          placed = true;
+          break;
+        } else {
+          console.log(`❌ Corner ${corner.label} occupied`);
+        }
+      }
+      
+      // If no corners available, skip this L-duct (don't put on edges)
+      if (!placed) {
+        console.log(`Warning: No corners available for L-shaped duct ${duct.name}, skipping`);
+        continue; // Skip to next duct
+      }
+    }
+    
+    // Strategy 2: Place straight ducts along frame edges (L-ducts already handled above)
+    if (!placed && !isLShaped) {
+      // Determine if this is a wide (120x29) or tall (29x120) duct based on original dimensions
+      const isWideRect = duct.w > duct.h;
+      console.log(`Placing straight duct ${duct.name}: ${duct.w}×${duct.h}, isWideRect: ${isWideRect}`);
+      
+      // Count how many ducts are already placed on each edge
+      const edgeCounts = { top: 0, bottom: 0, left: 0, right: 0 };
+      for (const existingDuct of result) {
+        if (existingDuct.name.toLowerCase().includes('cable duct') && !existingDuct.name.toLowerCase().includes('cable duct l')) {
+          // Determine which edge this existing straight duct is on
+          if (existingDuct.y <= FRAME_MARGIN + 5) edgeCounts.top++;
+          else if (existingDuct.y >= printer.h - FRAME_MARGIN - existingDuct.h - 5) edgeCounts.bottom++;
+          else if (existingDuct.x <= FRAME_MARGIN + 5) edgeCounts.left++;
+          else if (existingDuct.x >= printer.w - FRAME_MARGIN - existingDuct.w - 5) edgeCounts.right++;
+        }
+      }
+      
+      // Calculate centered positions between L-ducts
+      // Detect L-duct size from placed ducts (could be 90mm or 120mm)
+      let L_SIZE = 90; // default
+      for (const placedDuct of result) {
+        if (placedDuct.name.toLowerCase().includes('cable duct l')) {
+          L_SIZE = Math.max(placedDuct.w, placedDuct.h); // L-ducts are square
+          break;
+        }
+      }
+      console.log(`Using L-duct size: ${L_SIZE}mm for centering calculations`);
+      
+      // For horizontal edges: use original duct width if no rotation, height if rotated
+      const topBottomEffectiveW = isWideRect ? duct.w : duct.h; // horizontal placement width
+      const topBottomEffectiveH = isWideRect ? duct.h : duct.w; // horizontal placement height
+      
+      // For vertical edges: use height if no rotation, width if rotated  
+      const leftRightEffectiveW = isWideRect ? duct.h : duct.w; // vertical placement width
+      const leftRightEffectiveH = isWideRect ? duct.w : duct.h; // vertical placement height
+      
+      // Calculate centered positions for each edge
+      const topEdgeX = FRAME_MARGIN + L_SIZE + (printer.w - FRAME_MARGIN*2 - L_SIZE*2 - topBottomEffectiveW) / 2;
+      const bottomEdgeX = topEdgeX; // Same horizontal centering
+      const leftEdgeY = FRAME_MARGIN + L_SIZE + (printer.h - FRAME_MARGIN*2 - L_SIZE*2 - leftRightEffectiveH) / 2;
+      const rightEdgeY = leftEdgeY; // Same vertical centering
+      
+      // Prioritize edges with fewer ducts to create balanced perimeter  
+      const edgePositions = [
+        // Top edge (centered horizontally between L-ducts)
+        { x: topEdgeX, y: FRAME_MARGIN, horizontal: true, rotation: isWideRect ? 0 : 1, edge: 'top', count: edgeCounts.top },
+        // Bottom edge (centered horizontally between L-ducts)
+        { x: bottomEdgeX, y: printer.h - FRAME_MARGIN - topBottomEffectiveH, horizontal: true, rotation: isWideRect ? 0 : 1, edge: 'bottom', count: edgeCounts.bottom },
+        // Left edge (centered vertically between L-ducts)
+        { x: FRAME_MARGIN, y: leftEdgeY, horizontal: false, rotation: isWideRect ? 1 : 0, edge: 'left', count: edgeCounts.left },
+        // Right edge (centered vertically between L-ducts)
+        { x: printer.w - FRAME_MARGIN - leftRightEffectiveW, y: rightEdgeY, horizontal: false, rotation: isWideRect ? 1 : 0, edge: 'right', count: edgeCounts.right },
+      ].sort((a, b) => a.count - b.count); // Try edges with fewer ducts first
+    
+    for (const edge of edgePositions) {
+      // For rotated ducts, calculate the effective dimensions after rotation
+      const effectiveW = edge.rotation % 2 === 0 ? duct.w : duct.h;
+      const effectiveH = edge.rotation % 2 === 0 ? duct.h : duct.w;
+      
+      // Try the centered position for this edge
+      const x = edge.x;
+      const y = edge.y;
+      
+      // Ensure within frame bounds (using effective dimensions)
+      if (x + effectiveW <= printer.w - FRAME_MARGIN && y + effectiveH <= printer.h - FRAME_MARGIN) {
+        if (isSpotFree(x, y, effectiveW, effectiveH)) {
+          const newDuct = {
+            id: nextId++,
+            name: duct.name,
+            x: snap(x),
+            y: snap(y),
+            w: duct.w,
+            h: duct.h,
+            rotation: edge.rotation, // Use edge-specific rotation
+            catColor: ductData.color,
+            stl: duct.stl || '',
+            orient: duct.orient || 'flat',
+            _locked: false,
+            _col: false,
+          };
+          result.push(newDuct);
+          markSpotUsed(x, y, effectiveW, effectiveH);
+          placed = true;
+          console.log(`✅ Placed straight duct ${duct.name} CENTERED on ${edge.edge} edge with rotation ${edge.rotation} (${duct.w}×${duct.h} → ${effectiveW}×${effectiveH}), count was: ${edge.count}`);
+          break;
+        }
+      }
+    }
+    }
+    
+    // Strategy 3: If edge placement failed, try gaps between components (straight ducts only)
+    if (!placed && !isLShaped && existingComponents.length > 1) {
+      // Find largest gaps between components and try to route ducts through them
+      for (let attempts = 0; attempts < 20 && !placed; attempts++) {
+        const x = FRAME_MARGIN + Math.random() * Math.max(0, printer.w - FRAME_MARGIN * 2 - duct.w);
+        const y = FRAME_MARGIN + Math.random() * Math.max(0, printer.h - FRAME_MARGIN * 2 - duct.h);
+        
+        if (isSpotFree(x, y, duct.w, duct.h)) {
+          const newDuct = {
+            id: nextId++,
+            name: duct.name,
+            x: snap(x),
+            y: snap(y),
+            w: duct.w,
+            h: duct.h,
+            rotation: 0, // No specific rotation for gap placement
+            catColor: ductData.color,
+            stl: duct.stl || '',
+            orient: duct.orient || 'flat',
+            _locked: false,
+            _col: false,
+          };
+          result.push(newDuct);
+          markSpotUsed(x, y, duct.w, duct.h);
+          placed = true;
+        }
+      }
+    }
+    
+    // Fallback: if still not placed, force placement in available space (straight ducts only)
+    if (!placed && !isLShaped) {
+      console.log(`Warning: Could not optimally place duct ${duct.name}, using fallback`);
+      for (let gx = FRAME_MARGIN; gx + duct.w <= printer.w - FRAME_MARGIN && !placed; gx += 10) {
+        for (let gy = FRAME_MARGIN; gy + duct.h <= printer.h - FRAME_MARGIN && !placed; gy += 10) {
+          if (isSpotFree(gx, gy, duct.w, duct.h)) {
+            const newDuct = {
+              id: nextId++,
+              name: duct.name,
+              x: snap(gx),
+              y: snap(gy),
+              w: duct.w,
+              h: duct.h,
+              rotation: 0,
+              catColor: ductData.color,
+              stl: duct.stl || '',
+              orient: duct.orient || 'flat',
+              _locked: false,
+              _col: false,
+            };
+            result.push(newDuct);
+            markSpotUsed(gx, gy, duct.w, duct.h);
+            placed = true;
+          }
+        }
+      }
+    }
+  }
+  
+  console.log(`Placed ${result.length} cable ducts`);
+  return result;
+}
+
+// Auto-place existing placed components (re-arrange using SA)
+function autoPlaceExisting() {
+  if (placed.length === 0) { alert('No components to arrange. Use "Suggest Layout" to add components first.'); return; }
+  const unlocked = placed.filter(c => !c._locked);
+  if (unlocked.length === 0) { alert('All components are locked. Unlock some (L key) to auto-place.'); return; }
+
+  console.log(`Auto-placing ${unlocked.length} unlocked components using SA...`);
+
+  // Build component list from unlocked placements
+  const components = unlocked.map(c => ({
+    comp: { name: c.name, w: c.w, h: c.h, stl: c.stl, orient: c.orient },
+    color: c.catColor,
+    catId: getCatIdForComp(c.name),
+  }));
+
+  // Calculate margin before filtering placed (need full component set for duct detection)
+  const hasLDucts = placed.some(c => c.name.toLowerCase().includes('cable duct l'));
+  const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN;
+
+  // Remove unlocked components from placed array
+  placed = placed.filter(c => c._locked);
+  selected = null;
+
+  // Re-place using simulated annealing
+  const seededComponents = seedPlacement(components, reservedMargin);
+  
+  // Separate cable ducts (fixed) from regular components (optimizable) 
+  const cableDucts = placed.filter(c => c.name.toLowerCase().includes('cable duct'));
+  const nonDuctComponents = placed.filter(c => !c.name.toLowerCase().includes('cable duct'));
+  
+  // Merge with locked non-duct components for SA (SA will respect locked components as obstacles)
+  const allComponents = [...nonDuctComponents, ...seededComponents];
+  const optimizedComponents = annealLayout(allComponents, 3000);
+  
+  // Update placed array: keep cable ducts in original positions + optimized regular components
+  placed = [...cableDucts, ...optimizedComponents];
+
+  updateBOM(); 
+  draw();
+  if (currentView === '3d') build3DScene();
+
+  console.log(`Auto-place complete: repositioned ${unlocked.length} components`);
+}
+
+
+
+
+// ============== CONSTRAINTS ==============
+// DIN rail alignment: snap Y to common DIN rail positions
+
+
+
+
+// ============== GO ==============
+console.log('🚀 FT EMS VISUALIZER LOADED - Build 2026-03-05-15:21 - NUCLEAR ANTI-CLUSTER v2.0 ACTIVE - GITHUB SYNC TEST');
+init(); centerView();
+</script>
+</body>
+</html>
