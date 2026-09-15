@@ -48,6 +48,18 @@ This repo is configured for GitHub Pages. Enable it in Settings → Pages → De
 Dev: https://stunning-genie-d26053.netlify.app/
 "Prod": https://ft-ems-planner.netlify.app/
 
+## Development and Regression Tests
+
+The regression gate combines fast Node unit tests with Playwright tests against the real browser UI. It covers collapsed and searchable component menus, selected-component actions, toolbar placement, and locking behavior.
+
+```bash
+npm install
+npx playwright install chromium
+npm test
+```
+
+Pull requests and pushes to `main` run the same `npm test` gate in GitHub Actions.
+
 ## Zone-Based Auto Placement
 
 The planner includes an intelligent zone-based auto-placement system that organizes components by function:
@@ -81,10 +93,10 @@ The planner includes an intelligent zone-based auto-placement system that organi
 |-----|--------|
 | Click component | Select |
 | Drag | Move component |
-| R | Rotate selected 90° |
-| D | Duplicate selected |
-| L | Lock/unlock selected (skip during auto-place) |
-| Delete/Backspace | Remove selected |
+| Context toolbar ↻ / R | Rotate selected 90° |
+| Context toolbar ⧉ / D | Duplicate selected |
+| Context toolbar 🔓/🔒 / L | Lock/unlock selected (prevents dragging and auto-placement) |
+| Context toolbar × / Delete/Backspace | Remove selected |
 | Scroll | Zoom |
 | Middle-click drag | Pan |
 
