@@ -4,3 +4,6 @@ Thumbs.db
 
 # Backup files
 *.bak
+node_modules/
+playwright-report/
+test-results/

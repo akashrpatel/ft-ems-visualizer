@@ -31,12 +31,18 @@ A web-based graphical layout planner for the [FizzysTech Electronics Management 
 
 ### Option 1: Local
 ```bash
+# First-time setup for a Git clone
+git lfs install
+git lfs pull
+
 # Linux/Mac
 ./start.sh
 
 # Windows
 start-windows.bat
 ```
+
+Then use `http://localhost:8080`. Do not open `index.html` directly: browsers block `file://` pages from loading the neighboring STL model files.
 
 ### Option 2: Any Web Server
 Just serve the folder — it's a single `index.html` + STL files. No build step needed.
@@ -47,6 +53,18 @@ This repo is configured for GitHub Pages. Enable it in Settings → Pages → De
 ### Option 4: Netlify Hosted
 Dev: https://stunning-genie-d26053.netlify.app/
 "Prod": https://ft-ems-planner.netlify.app/
+
+## Development and Regression Tests
+
+The regression gate uses Playwright against the real browser UI. It covers themes and persistence, the 2D canvas palette, direct-file launch guidance, 3D theme isolation, and the STL assets involved in the Trident/Octopus loading regression.
+
+```bash
+npm install
+npx playwright install chromium
+npm test
+```
+
+Pull requests and pushes to `main` run the same `npm test` gate in GitHub Actions.
 
 ## Zone-Based Auto Placement
 
@@ -74,6 +92,7 @@ The planner includes an intelligent zone-based auto-placement system that organi
 - **Lock components** — Press **L** to lock/unlock; locked components are skipped during auto-place
 - **Overflow handling** — Components that don't fit their zone spill into available space
 - **Per-printer presets** — Zone proportions auto-adjust for small/large printers
+- **Optional themes** — Choose Classic, Readable Dark, or Light from the top bar; your preference is saved in the browser
 
 ## Controls
 
