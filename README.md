@@ -57,6 +57,7 @@ Dev: https://stunning-genie-d26053.netlify.app/
 ## Development and Regression Tests
 
 The regression gate uses Playwright against the real browser UI. It covers themes and persistence, the 2D canvas palette, direct-file launch guidance, 3D theme isolation, and the STL assets involved in the Trident/Octopus loading regression.
+The regression gate combines fast Node unit tests with Playwright tests against the real browser UI. It covers collapsed and searchable component menus, selected-component actions, toolbar placement, and locking behavior.
 
 ```bash
 npm install
@@ -100,10 +101,10 @@ The planner includes an intelligent zone-based auto-placement system that organi
 |-----|--------|
 | Click component | Select |
 | Drag | Move component |
-| R | Rotate selected 90° |
-| D | Duplicate selected |
-| L | Lock/unlock selected (skip during auto-place) |
-| Delete/Backspace | Remove selected |
+| Context toolbar ↻ / R | Rotate selected 90° |
+| Context toolbar ⧉ / D | Duplicate selected |
+| Context toolbar 🔓/🔒 / L | Lock/unlock selected (prevents dragging and auto-placement) |
+| Context toolbar × / Delete/Backspace | Remove selected |
 | Scroll | Zoom |
 | Middle-click drag | Pan |
 

@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "test": "npm run test:e2e",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "test:headed": "playwright test --headed"
   },

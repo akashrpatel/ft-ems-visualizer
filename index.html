@@ -15,6 +15,7 @@ try {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="layout-ui.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -124,6 +125,15 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #view-3d-status { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; padding: 24px; background: var(--bg); color: var(--text); font-size: var(--font-base); text-align: center; }
 #view-3d-status.visible { display: flex; }
 #view-3d-status.error { inset: auto 16px 16px; display: block; border: 1px solid var(--danger); border-radius: 6px; background: var(--panel); color: var(--danger); pointer-events: none; }
+.object-toolbar { position: absolute; z-index: 5; display: flex; gap: 3px; padding: 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.35); transform: translate(-50%, -100%); }
+.object-toolbar[hidden] { display: none; }
+.object-toolbar.below { transform: translate(-50%, 0); }
+.object-action { width: 30px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; font-size: 16px; line-height: 1; }
+.object-action:hover, .object-action:focus-visible { background: #1a4a8a; outline: none; }
+.object-action.active { background: var(--success); color: #16213e; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); }
+.object-action.active:hover, .object-action.active:focus-visible { background: var(--success); color: #16213e; filter: brightness(1.12); }
+.object-action.delete { margin-left: 3px; border-left: 1px solid rgba(255,255,255,0.2); border-radius: 0 4px 4px 0; color: var(--danger); }
+.object-action.delete:hover, .object-action.delete:focus-visible { background: var(--danger); color: var(--text); }
 
 /* BOM panel */
 #bom-panel { width: 220px; min-width: 220px; background: var(--panel); border-left: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
@@ -242,6 +252,13 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   <div id="canvas-wrap">
     <canvas id="canvas"></canvas>
     <div id="view-3d"><div id="view-3d-status" role="status" aria-live="polite"></div></div>
+    <div id="view-3d"></div>
+    <div id="object-toolbar" class="object-toolbar" role="toolbar" aria-label="Selected component actions" hidden>
+      <button class="object-action" type="button" title="Duplicate (D)" aria-label="Duplicate selected component" aria-keyshortcuts="D" onclick="duplicateSelected()">⧉</button>
+      <button class="object-action" type="button" title="Rotate 90° (R)" aria-label="Rotate selected component 90 degrees" aria-keyshortcuts="R" onclick="rotateComponent(selected)">↻</button>
+      <button class="object-action" id="object-lock" type="button" title="Lock (L)" aria-label="Lock selected component" aria-keyshortcuts="L" onclick="toggleSelectedLock()">🔓</button>
+      <button class="object-action delete" type="button" title="Delete (Del)" aria-label="Delete selected component" aria-keyshortcuts="Delete" onclick="removeSelected()">×</button>
+    </div>
     <div id="canvas-info">Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | Del: Remove</div>
   </div>
   <div id="bom-panel">
@@ -625,10 +642,10 @@ function buildLibrary() {
   lib.innerHTML = '';
   CATEGORIES.forEach(cat => {
     const header = document.createElement('div');
-    header.className = 'cat-header';
+    header.className = 'cat-header collapsed';
     header.innerHTML = `<span class="arrow">▼</span> ${cat.name} <span class="count">${cat.items.length}</span>`;
     const items = document.createElement('div');
-    items.className = 'cat-items';
+    items.className = 'cat-items hidden';
     header.onclick = () => { header.classList.toggle('collapsed'); items.classList.toggle('hidden'); };
     lib.appendChild(header);
 
@@ -678,6 +695,7 @@ function setView(v) {
   document.getElementById('btn-3d').classList.toggle('btn-active', v === '3d');
   document.getElementById('canvas').style.display = v === '2d' ? 'block' : 'none';
   document.getElementById('view-3d').style.display = v === '3d' ? 'block' : 'none';
+  updateObjectToolbar();
   document.getElementById('canvas-info').textContent = v === '2d'
     ? 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove'
     : 'Drag: Orbit | Scroll: Zoom | Right-drag: Pan';
@@ -826,6 +844,33 @@ function getBounds(c) {
   return { x: c.x, y: c.y, w: c.h, h: c.w };
 }
 
+function rotateComponent(c) {
+  if (!c) return;
+  c.rotation = (c.rotation + 1) % 4;
+  clampToFrame(c);
+  draw();
+  if (currentView === '3d') build3DScene();
+}
+
+function duplicateSelected() {
+  if (!selected) return;
+  const c = { ...selected, id: nextId++, x: selected.x+HEX_SPACING, y: selected.y+HEX_SPACING, _col: false };
+  clampToFrame(c);
+  placed.push(c); selected = c;
+  updateBOM(); draw();
+  if (currentView === '3d') build3DScene();
+}
+
+function toggleSelectedLock() {
+  if (!selected) return;
+  selected._locked = !selected._locked;
+  if (selected._locked && dragging?.comp === selected) {
+    dragging = null;
+    cvs.style.cursor = 'not-allowed';
+  }
+  draw();
+}
+
 function hitTest(mx, my) {
   const p = toCanvas(mx, my);
   for (let i = placed.length - 1; i >= 0; i--) {
@@ -860,7 +905,46 @@ function drawHex(cx, cy, r) {
   ctx.closePath();
 }
 
+function updateObjectToolbar() {
+  const toolbar = document.getElementById('object-toolbar');
+  if (currentView !== '2d' || !selected) {
+    toolbar.hidden = true;
+    return;
+  }
+
+  const b = getBounds(selected);
+  const screenBounds = {
+    left: panX + b.x * scale,
+    top: panY + b.y * scale,
+    right: panX + (b.x + b.w) * scale,
+    bottom: panY + (b.y + b.h) * scale,
+  };
+  if (screenBounds.right < 0 || screenBounds.left > cvs.width || screenBounds.bottom < 0 || screenBounds.top > cvs.height) {
+    toolbar.hidden = true;
+    return;
+  }
+
+  toolbar.hidden = false;
+  const placement = LayoutUI.placeContextToolbar({
+    bounds: screenBounds,
+    viewport: { width: cvs.width, height: cvs.height },
+    toolbar: { width: toolbar.offsetWidth, height: toolbar.offsetHeight },
+  });
+  toolbar.classList.toggle('below', placement.placement === 'below');
+  toolbar.style.left = `${placement.left}px`;
+  toolbar.style.top = `${placement.top}px`;
+
+  const lockButton = document.getElementById('object-lock');
+  const lockState = LayoutUI.lockControlState(Boolean(selected._locked));
+  lockButton.textContent = lockState.glyph;
+  lockButton.title = lockState.title;
+  lockButton.setAttribute('aria-label', lockState.label);
+  lockButton.setAttribute('aria-pressed', String(lockState.pressed));
+  lockButton.classList.toggle('active', lockState.active);
+}
+
 function draw() {
+  updateObjectToolbar();
   if (currentView !== '2d') return;
   const w = cvs.width, h = cvs.height;
   ctx.clearRect(0, 0, w, h);
@@ -946,6 +1030,8 @@ function draw() {
     // Lock indicator
     if (c._locked) {
       ctx.fillStyle = themeColor('--canvas-lock');
+    if (c._locked && !isSel) {
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.font = `${8/scale}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText('🔒', b.x + b.w - 2/scale, b.y + 2/scale);
     }
@@ -1004,7 +1090,9 @@ function onMouseDown(e) {
     if (hit) {
       selected = hit;
       const b = getBounds(hit), p = toCanvas(mx, my);
-      dragging = { comp: hit, offX: p.x-b.x, offY: p.y-b.y };
+      dragging = LayoutUI.canDragComponent(Boolean(hit._locked))
+        ? { comp: hit, offX: p.x-b.x, offY: p.y-b.y }
+        : null;
       placed = placed.filter(c => c !== hit); placed.push(hit);
     } else selected = null;
     draw();
@@ -1022,7 +1110,8 @@ function onMouseMove(e) {
     dragging.comp.y = snap(p.y - dragging.offY);
     draw(); return;
   }
-  cvs.style.cursor = hitTest(mx, my) ? 'move' : 'default';
+  const hit = hitTest(mx, my);
+  cvs.style.cursor = hit ? (hit._locked ? 'not-allowed' : 'move') : 'default';
 }
 
 function onMouseUp() {
@@ -1051,10 +1140,11 @@ function onKey(e) {
   if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
   else if (e.key === 'r' || e.key === 'R') {
     if (selected) { selected.rotation = (selected.rotation+1)%4; clampToFrame(selected); draw(); if (currentView==='3d') refresh3DScene(); }
+    rotateComponent(selected);
   }
   else if (e.key === 'Escape') { selected = null; draw(); }
   else if (e.key === 'l' || e.key === 'L') {
-    if (selected) { selected._locked = !selected._locked; draw(); }
+    toggleSelectedLock();
   }
   else if (e.key === 'd' || e.key === 'D') {
     if (selected) {
@@ -1063,6 +1153,7 @@ function onKey(e) {
       placed.push(c); selected = c;
       updateBOM(); draw(); if (currentView==='3d') refresh3DScene();
     }
+    duplicateSelected();
   }
 }
 
