@@ -252,7 +252,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   <div id="canvas-wrap">
     <canvas id="canvas"></canvas>
     <div id="view-3d"><div id="view-3d-status" role="status" aria-live="polite"></div></div>
-    <div id="view-3d"></div>
     <div id="object-toolbar" class="object-toolbar" role="toolbar" aria-label="Selected component actions" hidden>
       <button class="object-action" type="button" title="Duplicate (D)" aria-label="Duplicate selected component" aria-keyshortcuts="D" onclick="duplicateSelected()">⧉</button>
       <button class="object-action" type="button" title="Rotate 90° (R)" aria-label="Rotate selected component 90 degrees" aria-keyshortcuts="R" onclick="rotateComponent(selected)">↻</button>
@@ -1028,10 +1027,8 @@ function draw() {
     }
 
     // Lock indicator
-    if (c._locked) {
-      ctx.fillStyle = themeColor('--canvas-lock');
     if (c._locked && !isSel) {
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillStyle = themeColor('--canvas-lock');
       ctx.font = `${8/scale}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText('🔒', b.x + b.w - 2/scale, b.y + 2/scale);
     }
@@ -1139,7 +1136,6 @@ function onKey(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
   else if (e.key === 'r' || e.key === 'R') {
-    if (selected) { selected.rotation = (selected.rotation+1)%4; clampToFrame(selected); draw(); if (currentView==='3d') refresh3DScene(); }
     rotateComponent(selected);
   }
   else if (e.key === 'Escape') { selected = null; draw(); }
@@ -1147,12 +1143,6 @@ function onKey(e) {
     toggleSelectedLock();
   }
   else if (e.key === 'd' || e.key === 'D') {
-    if (selected) {
-      const c = { ...selected, id: nextId++, x: selected.x+HEX_SPACING, y: selected.y+HEX_SPACING, _col: false };
-      clampToFrame(c);
-      placed.push(c); selected = c;
-      updateBOM(); draw(); if (currentView==='3d') refresh3DScene();
-    }
     duplicateSelected();
   }
 }
