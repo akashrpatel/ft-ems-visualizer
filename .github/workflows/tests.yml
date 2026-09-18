@@ -11,6 +11,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch the STL fixtures used by the 3D regression test
+        run: >-
+          git lfs pull
+          --include="ems-files/ft-ems-trident-doom-rear-1-4.stl,ems-files/ft-ems-trident-doom-rear-2-4.stl,ems-files/ft-ems-trident-doom-rear-3-4.stl,ems-files/ft-ems-trident-doom-rear-4-4.stl,ems-files/ft-btt-octopus-mount.stl"
       - uses: actions/setup-node@v4
         with:
           node-version: 20

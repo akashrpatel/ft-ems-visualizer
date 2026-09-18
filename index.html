@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FT EMS Layout Planner</title>
+<script>
+try {
+  const savedTheme = localStorage.getItem('ft-ems-theme');
+  if (['classic', 'readable-dark', 'light'].includes(savedTheme)) {
+    document.documentElement.dataset.theme = savedTheme;
+  }
+} catch (_) {}
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
@@ -14,18 +22,71 @@
   --bg: #1a1a2e; --panel: #16213e; --accent: #0f3460;
   --highlight: #e94560; --text: #e0e0e0; --text-dim: #8888aa;
   --success: #4ecca3; --danger: #e94560;
+  --control-hover: #1a4a8a; --danger-hover: #c73650;
+  --control-border: rgba(255,255,255,0.1); --control-border-hover: rgba(255,255,255,0.2);
+  --surface-hover: rgba(255,255,255,0.06); --surface-hover-soft: rgba(255,255,255,0.04);
+  --surface-hover-faint: rgba(255,255,255,0.05); --surface-hover-strong: rgba(255,255,255,0.1);
+  --hairline-border: rgba(255,255,255,0.04); --subtle-border: rgba(255,255,255,0.06);
+  --modal-backdrop: rgba(0,0,0,0.7); --active-text: #e0e0e0; --danger-text: #e0e0e0;
+  --font-xs: 10px; --font-sm: 11px; --font-md: 12px; --font-base: 13px;
+  --canvas-bg: #0d1117; --canvas-grid: rgba(255,255,255,0.05);
+  --canvas-dot: rgba(255,255,255,0.18); --canvas-border: #3a5a8a;
+  --canvas-safe: rgba(58,90,138,0.3); --canvas-dimension: #4a6a9a;
+  --canvas-padding: rgba(255,255,255,0.03); --canvas-padding-border: rgba(255,255,255,0.08);
+  --canvas-shadow: rgba(0,0,0,0.25); --canvas-selection: #ffffff;
+  --canvas-hole: rgba(255,255,255,0.1); --canvas-lock: rgba(255,255,255,0.6);
+  --canvas-label: #eeeeee; --collision-fill: rgba(233,69,96,0.3);
+  --collision-padding: rgba(233,69,96,0.08); --collision-border: rgba(233,69,96,0.25);
+  --collision-stroke: #e94560;
+}
+:root[data-theme="readable-dark"] {
+  --bg: #0b1220; --panel: #172033; --accent: #3b526f;
+  --highlight: #60a5fa; --text: #f8fafc; --text-dim: #cbd5e1;
+  --success: #34d399; --danger: #e11d48;
+  --control-hover: #4d6b91; --danger-hover: #be123c;
+  --control-border: rgba(255,255,255,0.22); --control-border-hover: rgba(255,255,255,0.4);
+  --surface-hover: rgba(255,255,255,0.1); --surface-hover-soft: rgba(255,255,255,0.07);
+  --surface-hover-faint: rgba(255,255,255,0.08); --surface-hover-strong: rgba(255,255,255,0.16);
+  --hairline-border: rgba(255,255,255,0.08); --subtle-border: rgba(255,255,255,0.12);
+  --active-text: #07111f; --danger-text: #ffffff;
+  --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
+  --canvas-bg: #101827; --canvas-grid: rgba(255,255,255,0.09);
+  --canvas-dot: rgba(255,255,255,0.32); --canvas-border: #7da2d6;
+  --canvas-safe: rgba(125,162,214,0.55); --canvas-dimension: #cbd5e1;
+  --canvas-padding: rgba(255,255,255,0.055); --canvas-padding-border: rgba(255,255,255,0.16);
+  --canvas-selection: #ffffff; --canvas-label: #ffffff;
+}
+:root[data-theme="light"] {
+  --bg: #eef2f7; --panel: #ffffff; --accent: #cbd5e1;
+  --highlight: #1d4ed8; --text: #172033; --text-dim: #475569;
+  --success: #047857; --danger: #be123c;
+  --control-hover: #b8c5d5; --danger-hover: #9f1239;
+  --control-border: rgba(15,23,42,0.18); --control-border-hover: rgba(15,23,42,0.35);
+  --surface-hover: rgba(15,23,42,0.07); --surface-hover-soft: rgba(15,23,42,0.045);
+  --surface-hover-faint: rgba(15,23,42,0.055); --surface-hover-strong: rgba(15,23,42,0.11);
+  --hairline-border: rgba(15,23,42,0.07); --subtle-border: rgba(15,23,42,0.1);
+  --modal-backdrop: rgba(15,23,42,0.55); --active-text: #ffffff; --danger-text: #ffffff;
+  --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
+  --canvas-bg: #f8fafc; --canvas-grid: rgba(15,23,42,0.09);
+  --canvas-dot: rgba(15,23,42,0.28); --canvas-border: #64748b;
+  --canvas-safe: rgba(71,85,105,0.45); --canvas-dimension: #334155;
+  --canvas-padding: rgba(15,23,42,0.035); --canvas-padding-border: rgba(15,23,42,0.14);
+  --canvas-shadow: rgba(15,23,42,0.16); --canvas-selection: #0f172a;
+  --canvas-hole: rgba(15,23,42,0.16); --canvas-lock: rgba(15,23,42,0.72);
+  --canvas-label: #0f172a;
 }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
 /* Top bar */
 #topbar { background: var(--panel); border-bottom: 1px solid var(--accent); padding: 8px 16px; display: flex; align-items: center; gap: 12px; z-index: 10; }
 #topbar h1 { font-size: 18px; font-weight: 600; color: var(--highlight); white-space: nowrap; }
-#topbar h1 span { color: var(--text-dim); font-weight: 400; font-size: 13px; margin-left: 8px; }
-.btn { background: var(--accent); color: var(--text); border: 1px solid rgba(255,255,255,0.1); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.15s; white-space: nowrap; }
-.btn:hover { background: #1a4a8a; border-color: rgba(255,255,255,0.2); }
-.btn-danger { background: var(--danger); }
-.btn-danger:hover { background: #c73650; }
-.btn-active { background: var(--highlight); }
+#topbar h1 span { color: var(--text-dim); font-weight: 400; font-size: var(--font-base); margin-left: 8px; }
+.btn { background: var(--accent); color: var(--text); border: 1px solid var(--control-border); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: var(--font-base); transition: all 0.15s; white-space: nowrap; }
+.btn:hover { background: var(--control-hover); border-color: var(--control-border-hover); }
+.btn-danger { background: var(--danger); color: var(--danger-text); }
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-active, .btn-primary { background: var(--highlight); color: var(--active-text); }
+.theme-select { background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 7px; border-radius: 4px; font-size: var(--font-base); cursor: pointer; }
 .topbar-spacer { flex: 1; }
 .topbar-sep { width: 1px; height: 24px; background: var(--accent); }
 
@@ -35,32 +96,35 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 /* Sidebar */
 #sidebar { width: 280px; min-width: 280px; background: var(--panel); border-right: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
 #printer-select { padding: 12px; border-bottom: 1px solid var(--accent); }
-#printer-select label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
-#printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: 13px; }
+#printer-select label { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+#printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
-#search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: 13px; }
+#search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box input::placeholder { color: var(--text-dim); }
 #component-lib { flex: 1; overflow-y: auto; padding: 8px 0; }
-.cat-header { padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.cat-header { padding: 8px 12px; font-size: var(--font-sm); text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
 .cat-header:hover { color: var(--text); }
 .cat-header .arrow { transition: transform 0.2s; font-size: 10px; }
 .cat-header.collapsed .arrow { transform: rotate(-90deg); }
-.cat-header .count { margin-left: auto; font-size: 10px; background: var(--accent); padding: 1px 6px; border-radius: 8px; }
+.cat-header .count { margin-left: auto; font-size: var(--font-xs); background: var(--accent); padding: 1px 6px; border-radius: 8px; }
 .cat-items { padding: 0 8px 4px; }
 .cat-items.hidden { display: none; }
-.comp-item { padding: 5px 8px; margin: 1px 0; border-radius: 4px; cursor: grab; font-size: 12px; display: flex; align-items: center; gap: 6px; transition: background 0.1s; }
-.comp-item:hover { background: rgba(255,255,255,0.06); }
+.comp-item { padding: 5px 8px; margin: 1px 0; border-radius: 4px; cursor: grab; font-size: var(--font-md); display: flex; align-items: center; gap: 6px; transition: background 0.1s; }
+.comp-item:hover { background: var(--surface-hover); }
 .comp-item.filtered-out { display: none; }
 .comp-item .thumb { width: 24px; height: 24px; border-radius: 3px; flex-shrink: 0; }
 .comp-item .comp-info { flex: 1; min-width: 0; }
-.comp-item .comp-name { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.comp-item .dims { color: var(--text-dim); font-size: 10px; }
+.comp-item .comp-name { display: block; font-size: var(--font-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.comp-item .dims { color: var(--text-dim); font-size: var(--font-xs); }
 
 /* Canvas area */
 #canvas-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg); }
 #canvas-wrap canvas { position: absolute; top: 0; left: 0; }
-#canvas-info { position: absolute; bottom: 8px; left: 8px; font-size: 11px; color: var(--text-dim); pointer-events: none; }
+#canvas-info { position: absolute; bottom: 8px; left: 8px; font-size: var(--font-sm); color: var(--text-dim); pointer-events: none; }
 #view-3d { position: absolute; inset: 0; display: none; }
+#view-3d-status { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; padding: 24px; background: var(--bg); color: var(--text); font-size: var(--font-base); text-align: center; }
+#view-3d-status.visible { display: flex; }
+#view-3d-status.error { inset: auto 16px 16px; display: block; border: 1px solid var(--danger); border-radius: 6px; background: var(--panel); color: var(--danger); pointer-events: none; }
 .object-toolbar { position: absolute; z-index: 5; display: flex; gap: 3px; padding: 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.35); transform: translate(-50%, -100%); }
 .object-toolbar[hidden] { display: none; }
 .object-toolbar.below { transform: translate(-50%, 0); }
@@ -73,59 +137,66 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 
 /* BOM panel */
 #bom-panel { width: 220px; min-width: 220px; background: var(--panel); border-left: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
-#bom-panel h3 { padding: 12px; font-size: 13px; border-bottom: 1px solid var(--accent); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
-#bom-panel h3 .btn { padding: 3px 8px; font-size: 11px; }
+#bom-panel h3 { padding: 12px; font-size: var(--font-base); border-bottom: 1px solid var(--accent); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+#bom-panel h3 .btn { padding: 3px 8px; font-size: var(--font-sm); }
 #bom-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
-.bom-item { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.bom-item { display: flex; justify-content: space-between; padding: 3px 0; font-size: var(--font-md); border-bottom: 1px solid var(--hairline-border); }
 .bom-item .bom-count { color: var(--highlight); font-weight: 600; }
-#bom-empty { color: var(--text-dim); font-size: 13px; padding: 8px 0; text-align: center; }
-#bom-total { padding: 8px 12px; border-top: 1px solid var(--accent); font-size: 12px; color: var(--text-dim); }
+#bom-empty { color: var(--text-dim); font-size: var(--font-base); padding: 8px 0; text-align: center; }
+#bom-total { padding: 8px 12px; border-top: 1px solid var(--accent); font-size: var(--font-md); color: var(--text-dim); }
 
 /* Print checklist modal */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.modal-overlay { position: fixed; inset: 0; background: var(--modal-backdrop); display: flex; align-items: center; justify-content: center; z-index: 200; }
 .modal { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto; }
 .modal h2 { margin-bottom: 16px; color: var(--highlight); }
-.modal table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.modal th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--accent); color: var(--text-dim); font-size: 11px; text-transform: uppercase; }
-.modal td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.modal table { width: 100%; border-collapse: collapse; font-size: var(--font-base); }
+.modal th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--accent); color: var(--text-dim); font-size: var(--font-sm); text-transform: uppercase; }
+.modal td { padding: 5px 8px; border-bottom: 1px solid var(--subtle-border); }
 .modal .check-col { width: 30px; text-align: center; }
 .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
 
 /* Suggest Layout Wizard */
 .wizard-modal { max-width: 700px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; }
 .wizard-modal h2 { margin-bottom: 4px; }
-.wizard-printer { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+.wizard-printer { font-size: var(--font-base); color: var(--text-dim); margin-bottom: 12px; }
 .wizard-printer strong { color: var(--highlight); }
-.wizard-search { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; }
+.wizard-search { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 4px; font-size: var(--font-base); margin-bottom: 12px; }
 .wizard-search::placeholder { color: var(--text-dim); }
 .wizard-cats { flex: 1; overflow-y: auto; margin-bottom: 12px; }
 .wizard-cat { margin-bottom: 8px; }
 .wizard-cat-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg); border-radius: 4px; cursor: pointer; user-select: none; }
-.wizard-cat-header:hover { background: rgba(255,255,255,0.05); }
+.wizard-cat-header:hover { background: var(--surface-hover-faint); }
 .wizard-cat-header .arrow { font-size: 10px; transition: transform 0.2s; }
 .wizard-cat-header.collapsed .arrow { transform: rotate(-90deg); }
-.wizard-cat-name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+.wizard-cat-name { font-size: var(--font-md); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
 .wizard-cat-actions { display: flex; gap: 4px; }
-.wizard-cat-actions button { background: none; border: none; color: var(--text-dim); font-size: 10px; cursor: pointer; padding: 2px 6px; border-radius: 3px; }
-.wizard-cat-actions button:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+.wizard-cat-actions button { background: none; border: none; color: var(--text-dim); font-size: var(--font-xs); cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+.wizard-cat-actions button:hover { color: var(--text); background: var(--surface-hover-strong); }
 .wizard-items { padding: 4px 0 4px 16px; }
 .wizard-items.hidden { display: none; }
-.wizard-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 3px; font-size: 12px; cursor: pointer; }
-.wizard-item:hover { background: rgba(255,255,255,0.04); }
+.wizard-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 3px; font-size: var(--font-md); cursor: pointer; }
+.wizard-item:hover { background: var(--surface-hover-soft); }
 .wizard-item input[type="checkbox"] { accent-color: var(--highlight); cursor: pointer; }
 .wizard-item .wi-name { flex: 1; }
-.wizard-item .wi-dims { color: var(--text-dim); font-size: 11px; }
+.wizard-item .wi-dims { color: var(--text-dim); font-size: var(--font-sm); }
 .wizard-item .wi-quantity { display: flex; align-items: center; gap: 4px; }
-.wizard-item .qty-input { width: 40px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 2px 4px; border-radius: 2px; font-size: 11px; text-align: center; }
+.wizard-item .qty-input { width: 40px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 2px 4px; border-radius: 2px; font-size: var(--font-sm); text-align: center; }
 .wizard-item.filtered-out { display: none; }
 .wizard-footer { display: flex; align-items: center; gap: 12px; }
-.wizard-footer .wizard-count { flex: 1; font-size: 12px; color: var(--text-dim); }
+.wizard-footer .wizard-count { flex: 1; font-size: var(--font-md); color: var(--text-dim); }
 .wizard-footer .wizard-count strong { color: var(--highlight); }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+@media (max-width: 1400px) {
+  #topbar { gap: 8px; }
+  #topbar h1 span { display: none; }
+  .btn { padding-left: 10px; padding-right: 10px; }
+  .theme-select { max-width: 132px; }
+}
 
 
 .lock-indicator { position: absolute; font-size: 8px; pointer-events: none; }
@@ -157,16 +228,20 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   <button class="btn btn-danger" onclick="clearLayout()">🗑 Clear</button>
   <button class="btn" onclick="exportImage()">🖼 Export</button>
   <div class="topbar-sep"></div>
-  <button class="btn" style="background: var(--highlight);" onclick="showSuggestLayout()">✨ Suggest Layout</button>
+  <button class="btn btn-primary" onclick="showSuggestLayout()">✨ Suggest Layout</button>
   <button class="btn" id="btn-autoplace" onclick="autoPlaceExisting()">🧩 Auto Place</button>
   <div class="topbar-sep"></div>
-
+  <select id="theme-select" class="theme-select" aria-label="Color theme" title="Color theme" onchange="setTheme(this.value)">
+    <option value="classic">🎨 Classic</option>
+    <option value="readable-dark">🌙 Readable Dark</option>
+    <option value="light">☀️ Light</option>
+  </select>
 </div>
 
 <div id="main">
   <div id="sidebar">
     <div id="printer-select">
-      <label>Printer Model</label>
+      <label for="printer">Printer Model</label>
       <select id="printer" onchange="onPrinterChange()"></select>
     </div>
     <div id="search-box">
@@ -176,7 +251,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   </div>
   <div id="canvas-wrap">
     <canvas id="canvas"></canvas>
-    <div id="view-3d"></div>
+    <div id="view-3d"><div id="view-3d-status" role="status" aria-live="polite"></div></div>
     <div id="object-toolbar" class="object-toolbar" role="toolbar" aria-label="Selected component actions" hidden>
       <button class="object-action" type="button" title="Duplicate (D)" aria-label="Duplicate selected component" aria-keyshortcuts="D" onclick="duplicateSelected()">⧉</button>
       <button class="object-action" type="button" title="Rotate 90° (R)" aria-label="Rotate selected component 90 degrees" aria-keyshortcuts="R" onclick="rotateComponent(selected)">↻</button>
@@ -455,24 +530,96 @@ function processThumbQueue() {
     setTimeout(processThumbQueue, 5);
   }
 
-  if (stlCache[stlPath] || stlCache[item.stl]) {
-    renderThumb(stlCache[stlPath] || stlCache[item.stl]);
-  } else {
-    const loader = new THREE.STLLoader();
-    loader.load(stlPath, (geo) => {
-      stlCache[stlPath] = geo;
-      renderThumb(geo);
-    }, undefined, () => { thumbBusy = false; setTimeout(processThumbQueue, 5); });
-  }
+  loadStl(stlPath).then(renderThumb).catch(() => {
+    thumbBusy = false;
+    setTimeout(processThumbQueue, 5);
+  });
 }
 
 
 // 3D Scene
 let scene3d, camera3d, renderer3d, controls3d;
 let stlCache = {};
+const stlLoads = new Map();
+let sceneBuildVersion = 0;
+
+function loadStl(path) {
+  if (stlCache[path]) return Promise.resolve(stlCache[path]);
+  if (stlLoads.has(path)) return stlLoads.get(path);
+
+  const pending = new Promise((resolve, reject) => {
+    new THREE.STLLoader().load(path, (geometry) => {
+      stlCache[path] = geometry;
+      resolve(geometry);
+    }, undefined, () => reject(new Error(`Could not load ${path}`)));
+  }).finally(() => stlLoads.delete(path));
+
+  stlLoads.set(path, pending);
+  return pending;
+}
+
+async function refresh3DScene() {
+  if (currentView !== '3d') return;
+  const version = ++sceneBuildVersion;
+  const status = document.getElementById('view-3d-status');
+  if (location.protocol === 'file:') {
+    status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.';
+    status.className = 'visible error';
+    status.setAttribute('aria-busy', 'false');
+    return;
+  }
+  const paths = [...new Set([
+    ...(printer.frameStls || []).map(frame => frame.stl),
+    ...placed.map(component => component.stl).filter(Boolean),
+  ])];
+  const pendingPaths = paths.filter(path => !stlCache[path]);
+
+  status.textContent = pendingPaths.length ? 'Loading 3D models…' : '';
+  status.className = pendingPaths.length ? 'visible' : '';
+  status.setAttribute('aria-busy', pendingPaths.length ? 'true' : 'false');
+  const results = await Promise.allSettled(pendingPaths.map(loadStl));
+  if (version !== sceneBuildVersion || currentView !== '3d') return;
+
+  build3DScene();
+  const failed = results.filter(result => result.status === 'rejected').length;
+  if (failed) {
+    status.textContent = `${failed} 3D model${failed === 1 ? '' : 's'} could not be loaded. Simplified geometry is shown instead.`;
+    status.className = 'visible error';
+  } else {
+    status.textContent = '';
+    status.className = '';
+  }
+  status.setAttribute('aria-busy', 'false');
+}
+
+// ============== THEMES ==============
+const THEMES = new Set(['classic', 'readable-dark', 'light']);
+const THEME_STORAGE_KEY = 'ft-ems-theme';
+
+function themeColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function initTheme() {
+  const activeTheme = THEMES.has(document.documentElement.dataset.theme)
+    ? document.documentElement.dataset.theme
+    : 'classic';
+  document.documentElement.dataset.theme = activeTheme;
+  document.getElementById('theme-select').value = activeTheme;
+}
+
+function setTheme(theme) {
+  const nextTheme = THEMES.has(theme) ? theme : 'classic';
+  document.documentElement.dataset.theme = nextTheme;
+  document.getElementById('theme-select').value = nextTheme;
+  try { localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch (_) {}
+
+  draw();
+}
 
 // ============== INIT ==============
 function init() {
+  initTheme();
   const sel = document.getElementById('printer');
   PRINTERS.forEach(p => {
     const opt = document.createElement('option');
@@ -552,14 +699,18 @@ function setView(v) {
     ? 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove'
     : 'Drag: Orbit | Scroll: Zoom | Right-drag: Pan';
   if (v === '2d') { resizeCanvas(); draw(); }
-  else { init3D(); build3DScene(); }
+  else if (location.protocol === 'file:') {
+    const status = document.getElementById('view-3d-status');
+    status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.';
+    status.className = 'visible error';
+  } else { init3D(); refresh3DScene(); }
 }
 
 // ============== PRINTER ==============
 function onPrinterChange() {
   printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
   centerView(); draw();
-  if (currentView === '3d') build3DScene();
+  if (currentView === '3d') refresh3DScene();
 }
 
 function centerView() {
@@ -657,7 +808,7 @@ function addComponent(comp, color) {
   clampToFrame(c);
   placed.push(c); selected = c;
   updateBOM(); draw();
-  if (currentView === '3d') build3DScene();
+  if (currentView === '3d') refresh3DScene();
 }
 
 function snap(v) {
@@ -674,7 +825,7 @@ function removeSelected() {
   if (!selected) return;
   placed = placed.filter(c => c !== selected);
   selected = null; updateBOM(); draw();
-  if (currentView === '3d') build3DScene();
+  if (currentView === '3d') refresh3DScene();
 }
 
 // ============== 2D CANVAS ==============
@@ -801,7 +952,7 @@ function draw() {
   ctx.scale(scale, scale);
 
   // Frame bg
-  ctx.fillStyle = '#0d1117';
+  ctx.fillStyle = themeColor('--canvas-bg');
   ctx.fillRect(0, 0, printer.w, printer.h);
 
   // Hex grid — matches FT EMS standoff pattern (22mm center-to-center)
@@ -811,28 +962,29 @@ function draw() {
     for (let y = yOff; y <= printer.h - HEX_OFFSET_Y; y += HEX_ROW) {
       // Map from panel-bottom-origin to canvas-top-origin
       const cy = printer.h - y;
-      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.strokeStyle = themeColor('--canvas-grid');
       ctx.lineWidth = 0.3 / scale;
       drawHex(x, cy, HEX_R);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillStyle = themeColor('--canvas-dot');
       ctx.beginPath(); ctx.arc(x, cy, 1.0, 0, Math.PI * 2); ctx.fill();
     }
     col++;
   }
 
   // Frame border
-  ctx.strokeStyle = '#3a5a8a'; ctx.lineWidth = 2 / scale;
+  ctx.strokeStyle = themeColor('--canvas-border'); ctx.lineWidth = 2 / scale;
   ctx.strokeRect(0, 0, printer.w, printer.h);
 
   // Safe placement zone (frame margin)
-  ctx.strokeStyle = 'rgba(58,90,138,0.3)'; ctx.lineWidth = 0.5 / scale;
+  ctx.strokeStyle = themeColor('--canvas-safe'); ctx.lineWidth = 0.5 / scale;
   ctx.setLineDash([6/scale, 4/scale]);
   ctx.strokeRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN*2, printer.h - FRAME_MARGIN*2);
   ctx.setLineDash([]);
 
   // Dimensions
-  ctx.fillStyle = '#4a6a9a'; ctx.font = `${10/scale}px sans-serif`; ctx.textAlign = 'center';
+  const dimensionFontPx = document.documentElement.dataset.theme === 'readable-dark' ? 13 : 10;
+  ctx.fillStyle = themeColor('--canvas-dimension'); ctx.font = `${dimensionFontPx/scale}px sans-serif`; ctx.textAlign = 'center';
   ctx.fillText(`${printer.w}mm`, printer.w/2, -5/scale);
   ctx.save(); ctx.translate(-7/scale, printer.h/2); ctx.rotate(-Math.PI/2);
   ctx.fillText(`${printer.h}mm`, 0, 0); ctx.restore();
@@ -848,27 +1000,27 @@ function draw() {
     // This ensures 2D and 3D views show identical layout
     
     // Padding zone (cable duct clearance)  
-    ctx.fillStyle = c._col ? 'rgba(233,69,96,0.08)' : 'rgba(255,255,255,0.03)';
+    ctx.fillStyle = c._col ? themeColor('--collision-padding') : themeColor('--canvas-padding');
     ctx.fillRect(b.x - COMP_PAD, b.y - COMP_PAD, b.w + COMP_PAD*2, b.h + COMP_PAD*2);
-    ctx.strokeStyle = c._col ? 'rgba(233,69,96,0.25)' : 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = c._col ? themeColor('--collision-border') : themeColor('--canvas-padding-border');
     ctx.lineWidth = 0.5 / scale;
     ctx.setLineDash([3/scale, 3/scale]);
     ctx.strokeRect(b.x - COMP_PAD, b.y - COMP_PAD, b.w + COMP_PAD*2, b.h + COMP_PAD*2);
     ctx.setLineDash([]);
     
     // Component body
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillStyle = themeColor('--canvas-shadow');
     ctx.fillRect(b.x+1.5/scale, b.y+1.5/scale, b.w, b.h);
-    ctx.fillStyle = c._col ? 'rgba(233,69,96,0.3)' : hexRgba(c.catColor, 0.25);
+    ctx.fillStyle = c._col ? themeColor('--collision-fill') : hexRgba(c.catColor, 0.25);
     ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = c._col ? '#e94560' : (isSel ? '#fff' : c.catColor);
+    ctx.strokeStyle = c._col ? themeColor('--collision-stroke') : (isSel ? themeColor('--canvas-selection') : c.catColor);
     ctx.lineWidth = (isSel ? 2.5 : 1) / scale;
     ctx.setLineDash(isSel ? [4/scale, 3/scale] : []);
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     ctx.setLineDash([]);
 
     // Mount holes
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillStyle = themeColor('--canvas-hole');
     const m = 5;
     for (const p of [[m,m],[b.w-m,m],[m,b.h-m],[b.w-m,b.h-m]]) {
       ctx.beginPath(); ctx.arc(b.x+p[0], b.y+p[1], 1.5, 0, Math.PI*2); ctx.fill();
@@ -876,16 +1028,17 @@ function draw() {
 
     // Lock indicator
     if (c._locked && !isSel) {
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillStyle = themeColor('--canvas-lock');
       ctx.font = `${8/scale}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText('🔒', b.x + b.w - 2/scale, b.y + 2/scale);
     }
 
     // Label
-    ctx.fillStyle = '#eee';
+    ctx.fillStyle = themeColor('--canvas-label');
     const fs = Math.max(5, Math.min(9, Math.min(b.w, b.h)*0.18));
     ctx.font = `${fs}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     wrapText(c.name, b.x+b.w/2, b.y+b.h/2, b.w-6, fs+1);
+
   }
   ctx.restore();
 }
@@ -962,7 +1115,7 @@ function onMouseUp() {
   if (dragging) {
     clampToFrame(dragging.comp);
     draw();
-    if (currentView === '3d') build3DScene();
+    if (currentView === '3d') refresh3DScene();
   }
   panning = false; cvs.style.cursor = 'default'; dragging = null;
 }
@@ -1386,17 +1539,6 @@ function build3DScene() {
   // Frame: use actual STL panels as the backplane (preserve native coordinates, center combined)
   const frameStls = printer.frameStls;
   if (frameStls && frameStls.length > 0) {
-    // Check all frame STLs are loaded first
-    let allLoaded = true;
-    frameStls.forEach(fs => { if (!stlCache[fs.stl]) allLoaded = false; });
-    if (!allLoaded) {
-      const fLoader = new THREE.STLLoader();
-      frameStls.forEach(fs => {
-        if (!stlCache[fs.stl]) {
-          fLoader.load(fs.stl, (geometry) => { stlCache[fs.stl] = geometry; build3DScene(); }, undefined, () => {});
-        }
-      });
-    }
     // Clone all frame geometries preserving their native coordinates
     const geoList = [];
     frameStls.forEach(fs => {
@@ -1603,14 +1745,6 @@ function build3DScene() {
       edgeMesh.position.copy(mesh.position);
       edgeMesh.userData.dynamic = true;
       scene3d.add(edgeMesh);
-      // Try loading STL async
-      if (c.stl && !stlCache[c.stl]) {
-        const loader = new THREE.STLLoader();
-        loader.load(c.stl, (geometry) => {
-          stlCache[c.stl] = geometry;
-          build3DScene();
-        }, undefined, () => {});
-      }
     }
 
     // Component label (sprite)
@@ -1670,7 +1804,7 @@ function showChecklist() {
         <td class="check-col">☐</td>
         <td>${escapeHtml(name)}</td>
         <td style="text-align:center">${count}</td>
-        <td style="font-size:10px;color:var(--text-dim)">${escapeHtml(stls[name] || '')}</td>
+        <td style="font-size:var(--font-xs);color:var(--text-dim)">${escapeHtml(stls[name] || '')}</td>
       </tr>`).join('');
 
   const overlay = document.createElement('div');
@@ -1683,7 +1817,7 @@ function showChecklist() {
         <thead><tr><th class="check-col">✓</th><th>Component</th><th style="text-align:center">Qty</th><th>STL File</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div style="margin-top:12px;padding:8px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:12px;color:var(--text-dim)">
+      <div style="margin-top:12px;padding:8px;background:var(--surface-hover-soft);border-radius:4px;font-size:var(--font-md);color:var(--text-dim)">
         <strong>EMS Hardware (per mount point):</strong> M3×8 SHCS + M3 hex standoff + heat set insert<br>
         <strong>Tip:</strong> Print mounts in ABS/ASA for heat resistance
       </div>
@@ -1745,7 +1879,7 @@ function loadLayout() {
 
         placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
         selected = null; updateBOM(); centerView(); draw();
-        if (currentView === '3d') build3DScene();
+        if (currentView === '3d') refresh3DScene();
       } catch { alert('Invalid layout file'); }
     };
     reader.readAsText(file);
@@ -1756,7 +1890,7 @@ function loadLayout() {
 function clearLayout() {
   if (placed.length && !confirm('Clear all components?')) return;
   placed = []; selected = null; updateBOM(); draw();
-  if (currentView === '3d') build3DScene();
+  if (currentView === '3d') refresh3DScene();
 }
 
 function exportImage() {
@@ -1775,24 +1909,24 @@ function exportImage() {
   const ew = (printer.w+pad*2)*es, eh = (printer.h+pad*2+20)*es;
   ec.width = ew; ec.height = eh;
   const ex = ec.getContext('2d');
-  ex.fillStyle = '#1a1a2e'; ex.fillRect(0, 0, ew, eh);
-  ex.fillStyle = '#e94560'; ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
+  ex.fillStyle = themeColor('--bg'); ex.fillRect(0, 0, ew, eh);
+  ex.fillStyle = themeColor('--highlight'); ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
   ex.fillText(`FT EMS — ${PRINTERS.find(p=>p.id===printer.id).name}`, pad*es*0.4, 20*es);
   ex.save(); ex.translate(pad*es, (pad+10)*es); ex.scale(es, es);
-  ex.fillStyle = '#0d1117'; ex.fillRect(0, 0, printer.w, printer.h);
+  ex.fillStyle = themeColor('--canvas-bg'); ex.fillRect(0, 0, printer.w, printer.h);
   // Hex dots
-  ex.fillStyle = 'rgba(255,255,255,0.1)';
+  ex.fillStyle = themeColor('--canvas-hole');
   for (let x = 0; x <= printer.w; x += HEX_SPACING) {
     for (let y = 0; y <= printer.h; y += HEX_SPACING) {
       ex.beginPath(); ex.arc(x, y, 0.8, 0, Math.PI*2); ex.fill();
     }
   }
-  ex.strokeStyle = '#3a5a8a'; ex.lineWidth = 1.5; ex.strokeRect(0, 0, printer.w, printer.h);
+  ex.strokeStyle = themeColor('--canvas-border'); ex.lineWidth = 1.5; ex.strokeRect(0, 0, printer.w, printer.h);
   for (const c of placed) {
     const b = getBounds(c);
     ex.fillStyle = hexRgba(c.catColor, 0.3); ex.fillRect(b.x, b.y, b.w, b.h);
     ex.strokeStyle = c.catColor; ex.lineWidth = 1; ex.strokeRect(b.x, b.y, b.w, b.h);
-    ex.fillStyle = '#eee';
+    ex.fillStyle = themeColor('--canvas-label');
     const fs = Math.max(5, Math.min(8, Math.min(b.w, b.h)*0.16));
     ex.font = `${fs}px sans-serif`; ex.textAlign = 'center'; ex.textBaseline = 'middle';
     // Simple label for export
@@ -1831,7 +1965,7 @@ function showSuggestLayout() {
         <div class="wizard-cat-header" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.classList.toggle('hidden');">
           <span class="arrow">▼</span>
           <span class="wizard-cat-name" style="color: ${cat.color}">${cat.name}</span>
-          <span style="font-size:10px;color:var(--text-dim)">${cat.items.length}</span>
+          <span style="font-size:var(--font-xs);color:var(--text-dim)">${cat.items.length}</span>
           <div class="wizard-cat-actions">
             <button onclick="event.stopPropagation(); wizardToggleCat(${ci}, true)">All</button>
             <button onclick="event.stopPropagation(); wizardToggleCat(${ci}, false)">None</button>
@@ -1850,7 +1984,7 @@ function showSuggestLayout() {
       <div class="wizard-footer">
         <span class="wizard-count"><strong id="wizard-sel-count">0</strong> components selected</span>
         <button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-        <button class="btn" style="background: var(--highlight);" onclick="runSuggestLayout(this.closest('.wizard-modal')); this.closest('.modal-overlay').remove();">🚀 Generate Layout</button>
+        <button class="btn btn-primary" onclick="runSuggestLayout(this.closest('.wizard-modal')); this.closest('.modal-overlay').remove();">🚀 Generate Layout</button>
       </div>
     </div>`;
 
@@ -1956,7 +2090,7 @@ function runSuggestLayout(modal) {
   selected = null;
   updateBOM();
   draw();
-  if (currentView === '3d') build3DScene();
+  if (currentView === '3d') refresh3DScene();
 
   // Show result notification  
   const totalPlaced = placedComponents.length + (checkedDucts.length > 0 ? checkedDucts.length : 0);
@@ -3081,7 +3215,7 @@ function autoPlaceExisting() {
 
   updateBOM(); 
   draw();
-  if (currentView === '3d') build3DScene();
+  if (currentView === '3d') refresh3DScene();
 
   console.log(`Auto-place complete: repositioned ${unlocked.length} components`);
 }
