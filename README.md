@@ -7,7 +7,7 @@ A web-based graphical layout planner for the [FizzysTech Electronics Management 
 - 🖥️ **2D Layout Editor** — Drag-and-drop components onto a hex grid
 - 🎨 **3D Visualization** — Real STL backplane renders with Three.js
 - 🔍 **110+ Components** — MCUs, PSUs, SBCs, fans, cable ducts and more
-- 🖨️ **10 Printer Models** — Voron V0, V2.4, Trident, Switchwire, Micron, Doom Cube
+- 🖨️ **11 Printer Models** — Voron V0, V2.4, Trident, Switchwire, Micron, Doom Cube, EnderWire
 - 💾 **Save/Load** — Export layouts as JSON
 - 📋 **BOM & Checklist** — Parts list with print/CSV export
 - 📸 **PNG Export** — Screenshot your layout in 2D or 3D
@@ -26,6 +26,7 @@ A web-based graphical layout planner for the [FizzysTech Electronics Management 
 | Micron 180 | 280 × 287mm |
 | Doom Cube 300 | 450 × 450mm |
 | Doom Cube 350 | 500 × 500mm |
+| EnderWire | 248 × 266mm |
 
 ## Quick Start
 
