@@ -75,6 +75,24 @@ test('Switchwire Suggest Layout and Auto Place share a valid deterministic place
   expect(secondRun.components).toEqual(firstRun);
 });
 
+test('Switchwire frame STL uses the same 280 by 177 orientation as the 2D frame', async ({ page }) => {
+  await openPlanner(page);
+  await page.selectOption('#printer', 'sw');
+  await page.getByRole('button', { name: /3D View/ }).click();
+
+  const footprint = await page.evaluate(() => {
+    stlCache['ems-files/FT EMS SW Frame V2.stl'] = new THREE.BoxGeometry(176.5, 280, 24);
+    build3DScene();
+    const frame = scene3d.children.find(child => child.userData.frameId === 'sw');
+    const size = new THREE.Vector3();
+    new THREE.Box3().setFromObject(frame).getSize(size);
+    return { width: size.x, depth: size.z };
+  });
+
+  expect(footprint.width).toBeCloseTo(280, 0);
+  expect(footprint.depth).toBeCloseTo(177, 0);
+});
+
 test('EnderWire uses the same valid deterministic placement path', async ({ page }) => {
   await openPlanner(page);
   await page.selectOption('#printer', 'enderwire');
