@@ -40,6 +40,7 @@ try {
   --canvas-shadow: rgba(0,0,0,0.25); --canvas-selection: #ffffff;
   --canvas-hole: rgba(255,255,255,0.1); --canvas-lock: rgba(255,255,255,0.6);
   --canvas-label: #eeeeee; --collision-fill: rgba(233,69,96,0.3);
+  --exclusion-fill: rgba(233,69,96,0.18); --exclusion-stroke: rgba(233,69,96,0.8);
   --collision-padding: rgba(233,69,96,0.08); --collision-border: rgba(233,69,96,0.25);
   --collision-stroke: #e94560;
 }
@@ -1004,19 +1005,33 @@ function hitTest(mx, my) {
   return null;
 }
 
-function checkCollisions() {
-  for (const c of placed) c._col = false;
-  for (let i = 0; i < placed.length; i++) {
-    const a = getBounds(placed[i]);
-    for (let j = i + 1; j < placed.length; j++) {
-      const b = getBounds(placed[j]);
-      // Include padding around each component for cable duct clearance
-      if (a.x - COMP_PAD < b.x + b.w + COMP_PAD && a.x + a.w + COMP_PAD > b.x - COMP_PAD &&
-          a.y - COMP_PAD < b.y + b.h + COMP_PAD && a.y + a.h + COMP_PAD > b.y - COMP_PAD) {
-        placed[i]._col = true; placed[j]._col = true;
-      }
+function annotateLayoutIssues() {
+  const metadataIssues = LayoutCore.validateExclusionZones(printer.exclusionZones || []);
+  if (metadataIssues.length) {
+    for (const c of placed) {
+      c._issues = metadataIssues;
+      c._col = true;
     }
+    const issue = metadataIssues[0];
+    document.getElementById('canvas-info').textContent = `Invalid exclusion metadata: ${issue.zoneId} (${issue.reason})`;
+    return;
   }
+  for (const c of placed) {
+    c._issues = LayoutCore.getPlacementIssues(c, placed, printer, {
+      padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
+    });
+    c._col = c._issues.length > 0;
+  }
+  const info = document.getElementById('canvas-info');
+  const issueOwner = selected?._issues?.length ? selected : placed.find(c => c._issues?.length);
+  const issue = issueOwner?._issues?.[0];
+  const prefix = selected === issueOwner ? '' : `Layout invalid: ${issueOwner?.name} — `;
+  if (issue?.type === 'excluded-area') info.textContent = `${prefix}Inside exclusion: ${issue.zoneName || issue.zoneId}`;
+  else if (issue?.type === 'invalid-exclusion-zone') info.textContent = `Invalid exclusion metadata: ${issue.zoneId} (${issue.reason})`;
+  else if (issue?.type === 'component-collision') info.textContent = `${prefix}Overlaps another component`;
+  else if (issue?.type === 'outside-frame') info.textContent = `${prefix}Outside printer frame`;
+  else info.textContent = 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove';
 }
 
 function drawHex(cx, cy, r) {
@@ -1111,6 +1126,8 @@ function draw() {
   ctx.fillRect(0, 0, printer.w, printer.h);
   drawHoneycombGrid();
 
+  drawExclusionZones(ctx, 1 / scale);
+
   // Frame border
   ctx.strokeStyle = themeColor('--canvas-border'); ctx.lineWidth = 2 / scale;
   ctx.strokeRect(0, 0, printer.w, printer.h);
@@ -1131,7 +1148,7 @@ function draw() {
 
 
   // Components
-  checkCollisions();
+  annotateLayoutIssues();
   for (const c of placed) {
     const b = getBounds(c), isSel = c === selected;
     
@@ -1180,6 +1197,28 @@ function draw() {
 
   }
   ctx.restore();
+}
+
+function drawExclusionZones(target, lineWidth = 1) {
+  if (LayoutCore.validateExclusionZones(printer.exclusionZones || []).length) return;
+  target.save();
+  target.beginPath();
+  target.rect(0, 0, printer.w, printer.h);
+  target.clip();
+  target.fillStyle = themeColor('--exclusion-fill');
+  target.strokeStyle = themeColor('--exclusion-stroke');
+  target.lineWidth = lineWidth;
+  for (const zone of printer.exclusionZones || []) {
+    const points = LayoutCore.getExclusionPoints(zone);
+    if (!points.length) continue;
+    target.beginPath();
+    target.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) target.lineTo(points[i].x, points[i].y);
+    target.closePath();
+    target.fill();
+    target.stroke();
+  }
+  target.restore();
 }
 
 function wrapText(text, x, y, maxW, lineH) {
@@ -2065,6 +2104,7 @@ function exportImage() {
       ex.beginPath(); ex.arc(x, y, 0.8, 0, Math.PI*2); ex.fill();
     }
   }
+  drawExclusionZones(ex, 0.75);
   ex.strokeStyle = themeColor('--canvas-border'); ex.lineWidth = 1.5; ex.strokeRect(0, 0, printer.w, printer.h);
   for (const c of placed) {
     const b = getBounds(c);
@@ -2222,6 +2262,7 @@ function runSuggestLayout(modal) {
       frame: printer,
       margin: reservedMargin,
       padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
       gridStep: HEX_SPACING,
       fixed: placed,
       components: checkedComps.map((entry, index) => ({
@@ -3087,6 +3128,10 @@ function placeCableDucts(ductList, existingComponents) {
   function isSpotFree(x, y, w, h) {
     const key = `${Math.round(x/5)},${Math.round(y/5)}`; // 5mm grid for fast lookup
     if (usedSpots.has(key)) return false;
+    const exclusionCandidate = { x: snap(x), y: snap(y), w, h, rotation: 0 };
+    if (!LayoutCore.validatePlacement(exclusionCandidate, [], printer, { exclusionPadding: COMP_PAD })) {
+      return false;
+    }
     
     // Check against existing components (use getBounds for position, but check against visual bounds)
     for (const comp of existingComponents) {
@@ -3359,6 +3404,7 @@ function autoPlaceExisting() {
     frame: printer,
     margin: reservedMargin,
     padding: COMP_PAD,
+    exclusionPadding: COMP_PAD,
     gridStep: HEX_SPACING,
     fixed,
     components: unlocked,
