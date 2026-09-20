@@ -306,7 +306,7 @@ const PRINTERS = [
     { stl: 'ems-files/ft-ems-trident-doom-rear-3-4.stl' },
     { stl: 'ems-files/ft-ems-trident-doom-rear-4-4.stl' },
   ]},
-  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameStls: [
+  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, frameStls: [
     { stl: 'ems-files/FT EMS SW Frame V2.stl' },
   ]},
   { id: 'micron-180',   name: 'Micron 180',              w: 280, h: 287, frameStls: [
@@ -1650,15 +1650,22 @@ function build3DScene() {
       });
       // Center the group at the combined center
       frameGroup.position.set(-combCenter.x, -combCenter.y, -combCenter.z);
-      // Wrap in outer group to rotate around world origin after centering
-      const frameWrapper = new THREE.Group();
-      frameWrapper.add(frameGroup);
+      // First orient the native STL so its thinnest axis is vertical.
+      const frameOrientation = new THREE.Group();
+      frameOrientation.add(frameGroup);
       // Rotate so the thinnest native axis becomes Y (up).
       const dims = [{a:'x',v:combSize.x},{a:'y',v:combSize.y},{a:'z',v:combSize.z}].sort((a,b)=>a.v-b.v);
-      if (dims[0].a === 'z') frameWrapper.rotation.x = -Math.PI/2;
-      else if (dims[0].a === 'x') frameWrapper.rotation.z = -Math.PI/2;
+      if (dims[0].a === 'z') frameOrientation.rotation.x = -Math.PI/2;
+      else if (dims[0].a === 'x') frameOrientation.rotation.z = -Math.PI/2;
       else if (dims[0].a === 'y') { /* already correct */ }
+
+      // Native STL front/right orientation is not standardized. Apply explicit
+      // per-printer yaw after flattening so the 3D footprint matches logical W/H.
+      const frameWrapper = new THREE.Group();
+      frameWrapper.add(frameOrientation);
+      frameWrapper.rotation.y = (printer.frameYaw || 0) * Math.PI / 180;
       frameWrapper.userData.dynamic = true;
+      frameWrapper.userData.frameId = printer.id;
       scene3d.add(frameWrapper);
       // Compute frame surface Y: hex pattern is 4mm from bottom of frame STL
       frameWrapper.updateMatrixWorld(true);
