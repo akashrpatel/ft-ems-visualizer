@@ -6,7 +6,8 @@
 <title>FT EMS Layout Planner</title>
 <script>
 try {
-  const savedTheme = localStorage.getItem('ft-ems-theme');
+  const savedPreferences = JSON.parse(localStorage.getItem('ft-ems-preferences') || 'null');
+  const savedTheme = savedPreferences?.theme || localStorage.getItem('ft-ems-theme');
   if (['classic', 'readable-dark', 'light'].includes(savedTheme)) {
     document.documentElement.dataset.theme = savedTheme;
   }
@@ -462,6 +463,32 @@ let selected = null;
 let nextId = 1;
 let currentView = '2d';
 
+const PREFERENCES_STORAGE_KEY = 'ft-ems-preferences';
+const VALID_THEMES = new Set(['classic', 'readable-dark', 'light']);
+const VALID_VIEWS = new Set(['2d', '3d']);
+
+function readPreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
+    return {
+      theme: VALID_THEMES.has(saved.theme) ? saved.theme : null,
+      printerId: typeof saved.printerId === 'string' ? saved.printerId : null,
+      view: VALID_VIEWS.has(saved.view) ? saved.view : null,
+      search: typeof saved.search === 'string' ? saved.search : '',
+    };
+  } catch (_) {
+    return { theme: null, printerId: null, view: null, search: '' };
+  }
+}
+
+function writePreferences(patch) {
+  try {
+    const preferences = { ...readPreferences(), ...patch };
+    localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+    if (preferences.theme) localStorage.setItem(THEME_STORAGE_KEY, preferences.theme);
+  } catch (_) {}
+}
+
 // 2D Canvas
 const cvs = document.getElementById('canvas');
 const ctx = cvs.getContext('2d');
@@ -685,6 +712,7 @@ function buildLibrary() {
 
 function onSearch() {
   const q = document.getElementById('search').value.toLowerCase().trim();
+  writePreferences({ search: document.getElementById('search').value });
   document.querySelectorAll('.comp-item').forEach(el => {
     el.classList.toggle('filtered-out', q && !el.dataset.name.includes(q));
   });
@@ -701,6 +729,7 @@ function onSearch() {
 // ============== VIEW SWITCHING ==============
 function setView(v) {
   currentView = v;
+  writePreferences({ view: v });
   document.getElementById('btn-2d').classList.toggle('btn-active', v === '2d');
   document.getElementById('btn-3d').classList.toggle('btn-active', v === '3d');
   document.getElementById('canvas').style.display = v === '2d' ? 'block' : 'none';
@@ -720,6 +749,7 @@ function setView(v) {
 // ============== PRINTER ==============
 function onPrinterChange() {
   printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
+  writePreferences({ printerId: printer.id });
   centerView(); draw();
   if (currentView === '3d') refresh3DScene();
 }
