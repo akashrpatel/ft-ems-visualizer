@@ -16,6 +16,7 @@ try {
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
 <script src="layout-ui.js"></script>
+<script src="layout-core.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -815,13 +816,12 @@ function addComponent(comp, color) {
 }
 
 function snap(v) {
-  // Snap to nearest hex grid position
-  return Math.round(v / HEX_SPACING) * HEX_SPACING;
+  // Existing component anchors snap each top-left coordinate independently.
+  return LayoutCore.snapCoordinate(v, HEX_SPACING);
 }
 
 function snapUp(v) {
-  // Snap to next higher hex grid position (ensures we move away from boundaries)
-  return Math.ceil(v / HEX_SPACING) * HEX_SPACING;
+  return LayoutCore.snapUpCoordinate(v, HEX_SPACING);
 }
 
 function removeSelected() {
@@ -842,8 +842,7 @@ function resizeCanvas() {
 function toCanvas(mx, my) { return { x: (mx - panX) / scale, y: (my - panY) / scale }; }
 
 function getBounds(c) {
-  if (c.rotation % 2 === 0) return { x: c.x, y: c.y, w: c.w, h: c.h };
-  return { x: c.x, y: c.y, w: c.h, h: c.w };
+  return LayoutCore.getBounds(c);
 }
 
 function rotateComponent(c) {
@@ -1615,7 +1614,7 @@ function build3DScene() {
       // Wrap in outer group to rotate around world origin after centering
       const frameWrapper = new THREE.Group();
       frameWrapper.add(frameGroup);
-      // Rotate so thinnest native axis → Y (up): native is ~470x470x68
+      // Rotate so the thinnest native axis becomes Y (up).
       const dims = [{a:'x',v:combSize.x},{a:'y',v:combSize.y},{a:'z',v:combSize.z}].sort((a,b)=>a.v-b.v);
       if (dims[0].a === 'z') frameWrapper.rotation.x = -Math.PI/2;
       else if (dims[0].a === 'x') frameWrapper.rotation.z = -Math.PI/2;
@@ -2065,7 +2064,7 @@ function runSuggestLayout(modal) {
 
   if (checkedComps.length === 0 && checkedDucts.length === 0) return;
 
-  console.log(`Running SA layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
+  console.log(`Running shared layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
 
   let placedComponents = [];
   
@@ -2077,11 +2076,33 @@ function runSuggestLayout(modal) {
     
     console.log(`Cable duct aware SA: reserving ${reservedMargin}mm edge margin (cable duct margin: ${CABLE_DUCT_MARGIN}mm + padding: ${COMP_PAD}mm, base: ${FRAME_MARGIN}mm)`);
     
-    // Use reserved margin for component placement
-    const seededComponents = seedPlacement(checkedComps, reservedMargin);
-    placedComponents = deterministicGridPlacement(seededComponents, printer.w, printer.h, reservedMargin);
-    
+    const result = LayoutCore.placeComponents({
+      frame: printer,
+      margin: reservedMargin,
+      padding: COMP_PAD,
+      gridStep: HEX_SPACING,
+      fixed: placed,
+      components: checkedComps.map((entry, index) => ({
+        ...entry.comp,
+        id: `suggest-${index}`,
+        x: 0, y: 0, rotation: 0,
+        catColor: entry.color,
+        stl: entry.comp.stl || '',
+        orient: entry.comp.orient || 'flat',
+      })),
+    });
+    placedComponents = result.placed.map(c => ({
+      ...c,
+      id: nextId++,
+      _locked: false,
+      _col: false,
+    }));
     placed.push(...placedComponents);
+    if (result.unplaced.length) {
+      const names = result.unplaced.map(c => c.name).join(', ');
+      console.warn(`Could not place ${result.unplaced.length} component(s): ${names}`);
+      alert(`Could not place: ${names}. No invalid fallback placement was added.`);
+    }
   }
 
   // Phase 2: Place cable ducts around/between components
@@ -3179,42 +3200,35 @@ function placeCableDucts(ductList, existingComponents) {
   return result;
 }
 
-// Auto-place existing placed components (re-arrange using SA)
+// Auto-place existing placed components using the same deterministic engine as Suggest Layout.
 function autoPlaceExisting() {
   if (placed.length === 0) { alert('No components to arrange. Use "Suggest Layout" to add components first.'); return; }
-  const unlocked = placed.filter(c => !c._locked);
+  const unlocked = placed.filter(c => !c._locked && !c.name.toLowerCase().includes('cable duct'));
   if (unlocked.length === 0) { alert('All components are locked. Unlock some (L key) to auto-place.'); return; }
 
-  console.log(`Auto-placing ${unlocked.length} unlocked components using SA...`);
-
-  // Build component list from unlocked placements
-  const components = unlocked.map(c => ({
-    comp: { name: c.name, w: c.w, h: c.h, stl: c.stl, orient: c.orient },
-    color: c.catColor,
-    catId: getCatIdForComp(c.name),
-  }));
+  console.log(`Auto-placing ${unlocked.length} unlocked components using shared layout...`);
 
   // Calculate margin before filtering placed (need full component set for duct detection)
   const hasLDucts = placed.some(c => c.name.toLowerCase().includes('cable duct l'));
   const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN;
 
-  // Remove unlocked components from placed array
-  placed = placed.filter(c => c._locked);
+  const fixed = placed.filter(c => c._locked || c.name.toLowerCase().includes('cable duct'));
+  const result = LayoutCore.placeComponents({
+    frame: printer,
+    margin: reservedMargin,
+    padding: COMP_PAD,
+    gridStep: HEX_SPACING,
+    fixed,
+    components: unlocked,
+  });
+  if (result.unplaced.length) {
+    const names = result.unplaced.map(c => c.name).join(', ');
+    console.warn(`Auto Place could not place ${result.unplaced.length} component(s): ${names}`);
+    alert(`Auto Place could not place: ${names}. The existing layout was not changed.`);
+    return;
+  }
+  placed = [...fixed, ...result.placed];
   selected = null;
-
-  // Re-place using simulated annealing
-  const seededComponents = seedPlacement(components, reservedMargin);
-  
-  // Separate cable ducts (fixed) from regular components (optimizable) 
-  const cableDucts = placed.filter(c => c.name.toLowerCase().includes('cable duct'));
-  const nonDuctComponents = placed.filter(c => !c.name.toLowerCase().includes('cable duct'));
-  
-  // Merge with locked non-duct components for SA (SA will respect locked components as obstacles)
-  const allComponents = [...nonDuctComponents, ...seededComponents];
-  const optimizedComponents = annealLayout(allComponents, 3000);
-  
-  // Update placed array: keep cable ducts in original positions + optimized regular components
-  placed = [...cableDucts, ...optimizedComponents];
 
   updateBOM(); 
   draw();

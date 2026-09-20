@@ -14,7 +14,7 @@ jobs:
       - name: Fetch the STL fixtures used by the 3D regression test
         run: >-
           git lfs pull
-          --include="ems-files/ft-ems-trident-doom-rear-1-4.stl,ems-files/ft-ems-trident-doom-rear-2-4.stl,ems-files/ft-ems-trident-doom-rear-3-4.stl,ems-files/ft-ems-trident-doom-rear-4-4.stl,ems-files/ft-btt-octopus-mount.stl"
+          --include="ems-files/ft-ems-trident-doom-rear-1-4.stl,ems-files/ft-ems-trident-doom-rear-2-4.stl,ems-files/ft-ems-trident-doom-rear-3-4.stl,ems-files/ft-ems-trident-doom-rear-4-4.stl,ems-files/ft-btt-octopus-mount.stl,ems-files/FT EMS SW Frame V2.stl,ems-files/FT_ems_swc_v2_frame.stl,ems-files/ft-btt-skr-mini-e3-mount.stl,ems-files/ft-raspberry-pi-3-4-mount.stl"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
