@@ -604,7 +604,9 @@ function themeColor(name) {
 }
 
 function initTheme() {
-  const activeTheme = THEMES.has(document.documentElement.dataset.theme)
+  const savedTheme = readPreferences().theme;
+  const activeTheme = THEMES.has(savedTheme) ? savedTheme
+    : THEMES.has(document.documentElement.dataset.theme)
     ? document.documentElement.dataset.theme
     : 'classic';
   document.documentElement.dataset.theme = activeTheme;
@@ -615,13 +617,14 @@ function setTheme(theme) {
   const nextTheme = THEMES.has(theme) ? theme : 'classic';
   document.documentElement.dataset.theme = nextTheme;
   document.getElementById('theme-select').value = nextTheme;
-  try { localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch (_) {}
+  writePreferences({ theme: nextTheme });
 
   draw();
 }
 
 // ============== INIT ==============
 function init() {
+  const preferences = readPreferences();
   initTheme();
   const sel = document.getElementById('printer');
   PRINTERS.forEach(p => {
@@ -629,12 +632,17 @@ function init() {
     opt.value = p.id; opt.textContent = p.name;
     sel.appendChild(opt);
   });
+  const savedPrinter = PRINTERS.find(p => p.id === preferences.printerId);
+  if (savedPrinter) printer = savedPrinter;
   sel.value = printer.id;
   buildLibrary();
+  const search = document.getElementById('search');
+  search.value = preferences.search;
+  onSearch();
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); if (currentView === '3d') resize3D(); });
   setupCanvasEvents();
-  setView('2d');
+  setView(preferences.view || '2d');
 }
 
 
