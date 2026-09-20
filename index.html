@@ -98,6 +98,14 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #printer-select { padding: 12px; border-bottom: 1px solid var(--accent); }
 #printer-select label { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
 #printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
+#custom-frame-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
+#custom-frame-controls[hidden] { display: none; }
+#custom-frame-controls legend { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+#custom-frame-controls .custom-frame-fields { display: flex; gap: 6px; margin: 6px 0; }
+#custom-frame-controls label { flex: 1; font-size: var(--font-sm); color: var(--text-dim); }
+#custom-frame-controls input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
+#custom-frame-controls button { width: 100%; }
+#frame-dimensions { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); }
 #search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
 #search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box input::placeholder { color: var(--text-dim); }
@@ -244,6 +252,19 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       <label for="printer">Printer Model</label>
       <select id="printer" onchange="onPrinterChange()"></select>
     </div>
+    <fieldset id="custom-frame-controls" hidden>
+      <legend>Custom frame</legend>
+      <div class="custom-frame-fields">
+        <label for="custom-frame-width">Width (mm)
+          <input id="custom-frame-width" aria-label="Custom frame width (mm)" type="number" min="1" step="1" value="400">
+        </label>
+        <label for="custom-frame-height">Height (mm)
+          <input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="1" value="400">
+        </label>
+      </div>
+      <button class="btn" type="button" onclick="applyCustomFrame()">Apply custom frame</button>
+      <div id="frame-dimensions" aria-label="Frame dimensions" aria-live="polite"></div>
+    </fieldset>
     <div id="search-box">
       <input type="text" id="search" placeholder="🔍 Search components..." oninput="onSearch()">
     </div>
@@ -629,7 +650,12 @@ function init() {
     opt.value = p.id; opt.textContent = p.name;
     sel.appendChild(opt);
   });
+  const customOption = document.createElement('option');
+  customOption.value = 'custom';
+  customOption.textContent = 'Custom frame';
+  sel.appendChild(customOption);
   sel.value = printer.id;
+  updateFrameDimensions();
   buildLibrary();
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); if (currentView === '3d') resize3D(); });
@@ -711,8 +737,51 @@ function setView(v) {
 
 // ============== PRINTER ==============
 function onPrinterChange() {
-  printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
+  const selectedId = document.getElementById('printer').value;
+  if (selectedId === 'custom') {
+    updateCustomFrameVisibility();
+    return;
+  }
+  printer = PRINTERS.find(p => p.id === selectedId);
+  updateFrameDimensions();
   centerView(); draw();
+  if (currentView === '3d') refresh3DScene();
+}
+
+function updateFrameDimensions() {
+  updateCustomFrameVisibility();
+  document.getElementById('frame-dimensions').textContent =
+    `${printer.name.startsWith('Custom') ? 'Custom frame' : printer.name}: ${printer.w} × ${printer.h} mm`;
+}
+
+function updateCustomFrameVisibility() {
+  const controls = document.getElementById('custom-frame-controls');
+  const select = document.getElementById('printer');
+  controls.hidden = !select || select.value !== 'custom';
+}
+
+function applyCustomFrame() {
+  const width = Number(document.getElementById('custom-frame-width').value);
+  const height = Number(document.getElementById('custom-frame-height').value);
+  const status = document.getElementById('frame-dimensions');
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    status.textContent = 'Enter positive width and height values.';
+    return;
+  }
+
+  printer = { id: 'custom', name: `Custom — ${width}×${height}mm`, w: width, h: height };
+  const select = document.getElementById('printer');
+  let option = select.querySelector('option[value="custom"]');
+  if (!option) {
+    option = document.createElement('option');
+    option.value = 'custom';
+    select.appendChild(option);
+  }
+  option.textContent = printer.name;
+  select.value = 'custom';
+  updateFrameDimensions();
+  centerView();
+  draw();
   if (currentView === '3d') refresh3DScene();
 }
 
@@ -1800,7 +1869,7 @@ function showChecklist() {
     counts[c.name] = (counts[c.name] || 0) + 1;
     if (c.stl) stls[c.name] = c.stl;
   }
-  const printerName = PRINTERS.find(p => p.id === printer.id).name;
+  const printerName = printer.name;
   const rows = Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))
     .map(([name, count]) => `
       <tr>
@@ -1855,7 +1924,8 @@ function exportChecklistCSV() {
 // ============== SAVE/LOAD/EXPORT ==============
 function saveLayout() {
   const data = {
-    version: 4, printer: printer.id,
+    version: 5, printer: printer.id,
+    ...(printer.id === 'custom' ? { customFrame: { width: printer.w, height: printer.h } } : {}),
 
     components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, catColor: c.catColor, stl: c.stl, orient: c.orient || 'flat', locked: c._locked || false })),
   };
@@ -1875,9 +1945,13 @@ function loadLayout() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.printer) {
+        if (data.printer === 'custom' && data.customFrame) {
+          document.getElementById('custom-frame-width').value = data.customFrame.width;
+          document.getElementById('custom-frame-height').value = data.customFrame.height;
+          applyCustomFrame();
+        } else if (data.printer) {
           const p = PRINTERS.find(pr => pr.id === data.printer);
-          if (p) { printer = p; document.getElementById('printer').value = p.id; }
+          if (p) { printer = p; document.getElementById('printer').value = p.id; updateFrameDimensions(); }
         }
 
         placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
@@ -1914,7 +1988,7 @@ function exportImage() {
   const ex = ec.getContext('2d');
   ex.fillStyle = themeColor('--bg'); ex.fillRect(0, 0, ew, eh);
   ex.fillStyle = themeColor('--highlight'); ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
-  ex.fillText(`FT EMS — ${PRINTERS.find(p=>p.id===printer.id).name}`, pad*es*0.4, 20*es);
+  ex.fillText(`FT EMS — ${printer.name}`, pad*es*0.4, 20*es);
   ex.save(); ex.translate(pad*es, (pad+10)*es); ex.scale(es, es);
   ex.fillStyle = themeColor('--canvas-bg'); ex.fillRect(0, 0, printer.w, printer.h);
   // Hex dots
@@ -1948,7 +2022,7 @@ function showSuggestLayout() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
 
-  const printerName = PRINTERS.find(p => p.id === printer.id)?.name || printer.id;
+  const printerName = printer.name;
   let catHtml = '';
   CATEGORIES.forEach((cat, ci) => {
     let itemsHtml = '';
