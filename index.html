@@ -343,7 +343,11 @@ const PRINTERS = [
     { stl: 'ems-files/ft-ems-trident-doom-rear-3-4.stl' },
     { stl: 'ems-files/ft-ems-trident-doom-rear-4-4.stl' },
   ]},
-  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, frameStls: [
+  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, exclusionZones: [
+    // Rounded outward from the raised rail's transformed STL bounds:
+    // x 52.606..257.606, y 17.919..38.178 mm.
+    { id: 'switchwire-raised-rail', name: 'Raised electronics rail', rect: { x: 52, y: 17, w: 206, h: 22 } },
+  ], frameStls: [
     { stl: 'ems-files/FT EMS SW Frame V2.stl' },
   ]},
   { id: 'micron-180',   name: 'Micron 180',              w: 280, h: 287, frameStls: [

@@ -21,9 +21,18 @@ async function openPlanner(page) {
 
 async function readLayout(page) {
   return page.evaluate(() => ({
-    printer: { id: printer.id, w: printer.w, h: printer.h },
+    printer: {
+      id: printer.id,
+      w: printer.w,
+      h: printer.h,
+      exclusionZoneIds: (printer.exclusionZones || []).map(zone => zone.id),
+    },
     components: placed.map(c => ({ id: c.id, name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, locked: Boolean(c._locked) })),
-    valid: LayoutCore.validateLayout(placed, printer, { margin: FRAME_MARGIN, padding: COMP_PAD }),
+    valid: LayoutCore.validateLayout(placed, printer, {
+      margin: FRAME_MARGIN,
+      padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
+    }),
   }));
 }
 
@@ -55,6 +64,8 @@ test('Switchwire Suggest Layout and Auto Place share a valid deterministic place
   const suggested = await readLayout(page);
   expect(suggested.components).toHaveLength(2);
   expect(suggested.valid).toBe(true);
+  expect(suggested.printer.exclusionZoneIds).toEqual(['switchwire-raised-rail']);
+  expect(suggested.components.every(component => component.y >= 55)).toBe(true);
   expect(suggested.components.every(c => c.x % 11 === 0 && c.y % 11 === 0)).toBe(true);
 
   await page.evaluate(() => {
