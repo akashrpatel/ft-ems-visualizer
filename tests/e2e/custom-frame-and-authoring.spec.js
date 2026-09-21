@@ -14,7 +14,13 @@ test('custom frames expose dimensions and exclusions in the planner', async ({ p
   await expect(page.getByLabel('Frame dimensions')).toContainText('320 × 240 mm');
 
   await page.getByLabel('Custom exclusion name').fill('Rear rail');
-  await page.getByRole('button', { name: 'Add custom exclusion' }).click();
+  await page.getByRole('button', { name: 'Draw exclusion' }).click();
+  const canvas = page.locator('#canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + 180, box.y + 160);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 300, box.y + 220);
+  await page.mouse.up();
   await expect(page.locator('#custom-exclusion-list')).toContainText('Rear rail');
 });
 

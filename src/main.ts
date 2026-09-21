@@ -222,6 +222,7 @@ let customPrinter = { id: 'custom', name: 'Custom — 400×400mm', w: 400, h: 40
 let modelDrawing = false;
 let modelDrawStart = null;
 let modelDrawCurrent = null;
+let customZoneDrag = null;
 let topDownSelectedZoneId = null;
 let topDown3D = false;
 const AUTHORED_MODELS_STORAGE_KEY = 'ft-ems-authored-models';
@@ -720,21 +721,22 @@ function renderCustomExclusions() {
     remove.type = 'button';
     remove.textContent = '×';
     remove.setAttribute('aria-label', `Delete ${zone.name}`);
-    remove.onclick = event => {
-      event.stopPropagation();
-      customExclusionZones = customExclusionZones.filter(item => item.id !== zone.id);
-      customPrinter.exclusionZones = customExclusionZones;
-      if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
-      if (topDownSelectedZoneId === zone.id) topDownSelectedZoneId = null;
-      persistActiveModelDefinition();
-      renderCustomExclusions();
-      draw();
-    };
+    remove.onclick = event => { event.stopPropagation(); deleteCustomExclusion(zone.id); };
     row.append(label, remove);
     return row;
   }));
   const rename = document.getElementById('custom-exclusion-rename');
   if (rename) rename.disabled = !customExclusionZones.some(zone => zone.id === topDownSelectedZoneId);
+}
+
+function deleteCustomExclusion(id) {
+  customExclusionZones = customExclusionZones.filter(item => item.id !== id);
+  customPrinter.exclusionZones = customExclusionZones;
+  if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+  if (topDownSelectedZoneId === id) topDownSelectedZoneId = null;
+  persistActiveModelDefinition();
+  renderCustomExclusions();
+  draw();
 }
 
 function syncCustomExclusionInputs(zone) {
@@ -770,6 +772,30 @@ function renameSelectedCustomExclusion() {
   zone.name = name;
   if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
   persistActiveModelDefinition();
+  renderCustomExclusions();
+  draw();
+}
+
+function updateCustomZoneDrag(point) {
+  const drag = customZoneDrag;
+  const zone = drag.zone;
+  const original = drag.original;
+  if (drag.mode === 'move') {
+    zone.rect.x = Math.max(0, Math.min(printer.w - original.w, original.x + point.x - drag.start.x));
+    zone.rect.y = Math.max(0, Math.min(printer.h - original.h, original.y + point.y - drag.start.y));
+  } else {
+    const right = original.x + original.w;
+    const bottom = original.y + original.h;
+    const left = drag.corner.includes('w') ? Math.min(point.x, right - 1) : original.x;
+    const top = drag.corner.includes('n') ? Math.min(point.y, bottom - 1) : original.y;
+    const nextRight = drag.corner.includes('e') ? Math.max(point.x, left + 1) : right;
+    const nextBottom = drag.corner.includes('s') ? Math.max(point.y, top + 1) : bottom;
+    zone.rect.x = Math.max(0, left);
+    zone.rect.y = Math.max(0, top);
+    zone.rect.w = Math.min(printer.w - zone.rect.x, nextRight - zone.rect.x);
+    zone.rect.h = Math.min(printer.h - zone.rect.y, nextBottom - zone.rect.y);
+  }
+  syncCustomExclusionInputs(zone);
   renderCustomExclusions();
   draw();
 }
@@ -1159,6 +1185,33 @@ function draw() {
     ctx.setLineDash([]);
   }
 
+  // Manual-page style controls for custom exclusions: corner handles resize,
+  // dragging the body moves, and the red X removes the selected zone.
+  if (printer.id === 'custom') {
+    const zone = (printer.exclusionZones || []).find(item => item.id === topDownSelectedZoneId);
+    if (zone?.rect) {
+      const rect = zone.rect;
+      const handleSize = 6 / scale;
+      ctx.fillStyle = '#4ecca3';
+      for (const [x, y] of [[rect.x, rect.y], [rect.x + rect.w, rect.y], [rect.x, rect.y + rect.h], [rect.x + rect.w, rect.y + rect.h]]) {
+        ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+      }
+      const closeSize = 14 / scale;
+      const closeX = rect.x + rect.w - closeSize / 2;
+      const closeY = rect.y - closeSize / 2;
+      ctx.fillStyle = '#e94560';
+      ctx.fillRect(closeX, closeY, closeSize, closeSize);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2 / scale;
+      ctx.beginPath();
+      ctx.moveTo(closeX + 3 / scale, closeY + 3 / scale);
+      ctx.lineTo(closeX + closeSize - 3 / scale, closeY + closeSize - 3 / scale);
+      ctx.moveTo(closeX + closeSize - 3 / scale, closeY + 3 / scale);
+      ctx.lineTo(closeX + 3 / scale, closeY + closeSize - 3 / scale);
+      ctx.stroke();
+    }
+  }
+
   // Dimensions
   const dimensionFontPx = document.documentElement.dataset.theme === 'readable-dark' ? 13 : 10;
   ctx.fillStyle = themeColor('--canvas-dimension'); ctx.font = `${dimensionFontPx/scale}px sans-serif`; ctx.textAlign = 'center';
@@ -1268,6 +1321,30 @@ function onMouseDown(e) {
       draw();
       return;
     }
+    if (printer.id === 'custom') {
+      const point = toCanvas(mx, my);
+      const zones = printer.exclusionZones || [];
+      const zone = [...zones].reverse().find(item => {
+        const r = item.rect;
+        return r && point.x >= r.x - 8 / scale && point.x <= r.x + r.w + 8 / scale && point.y >= r.y - 14 / scale && point.y <= r.y + r.h + 8 / scale;
+      });
+      if (zone) {
+        selectCustomExclusion(zone.id);
+        const r = zone.rect;
+        const corner = [[r.x, r.y, 'nw'], [r.x + r.w, r.y, 'ne'], [r.x, r.y + r.h, 'sw'], [r.x + r.w, r.y + r.h, 'se']]
+          .find(([x, y]) => Math.hypot(point.x - x, point.y - y) <= 12 / scale);
+        const closeX = r.x + r.w;
+        const closeY = r.y;
+        if (point.x >= closeX - 14 / scale && point.x <= closeX + 8 / scale && point.y >= closeY - 14 / scale && point.y <= closeY + 10 / scale) {
+          deleteCustomExclusion(zone.id);
+        } else {
+          customZoneDrag = { zone, mode: corner ? 'resize' : 'move', corner: corner?.[2], start: point, original: { ...r } };
+        }
+        e.preventDefault();
+        draw();
+        return;
+      }
+    }
     if (AUTHORING_MODE || printer.id === 'custom') {
       const zone = hitExclusionZone(mx, my);
       if (zone) {
@@ -1294,6 +1371,10 @@ function onMouseMove(e) {
   if (currentView !== '2d') return;
   const rect = cvs.getBoundingClientRect();
   const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+  if (customZoneDrag) {
+    updateCustomZoneDrag(toCanvas(mx, my));
+    return;
+  }
   if (panning) { panX = e.clientX-panStart.x; panY = e.clientY-panStart.y; draw(); return; }
   if (modelDrawing && modelDrawStart) {
     modelDrawCurrent = toCanvas(mx, my);
@@ -1311,6 +1392,13 @@ function onMouseMove(e) {
 }
 
 function onMouseUp() {
+  if (customZoneDrag) {
+    customZoneDrag = null;
+    persistActiveModelDefinition();
+    renderCustomExclusions();
+    draw();
+    return;
+  }
   if (modelDrawing && modelDrawStart) {
     const point = modelDrawCurrent || modelDrawStart;
     const rect = {
@@ -1375,7 +1463,7 @@ function onKey(e) {
   else if (e.key === 'r' || e.key === 'R') {
     rotateComponent(selected);
   }
-  else if (e.key === 'Escape') { selected = null; modelDrawing = false; modelDrawStart = null; modelDrawCurrent = null; cvs.style.cursor = 'default'; draw(); }
+  else if (e.key === 'Escape') { selected = null; modelDrawing = false; modelDrawStart = null; modelDrawCurrent = null; customZoneDrag = null; cvs.style.cursor = 'default'; draw(); }
   else if (e.key === 'l' || e.key === 'L') {
     toggleSelectedLock();
   }

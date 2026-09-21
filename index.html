@@ -284,14 +284,8 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       <legend>Custom exclusions</legend>
       <label for="custom-exclusion-name">Name<input aria-label="Custom exclusion name" id="custom-exclusion-name" placeholder="Cable rail"></label>
       <button class="btn" id="custom-draw-toggle" type="button" onclick="toggleModelDrawing()">Draw exclusion</button>
-      <div class="control-grid">
-        <label for="custom-exclusion-x">X<input aria-label="Custom exclusion X" id="custom-exclusion-x" type="number" step="any" value="0"></label>
-        <label for="custom-exclusion-y">Y<input aria-label="Custom exclusion Y" id="custom-exclusion-y" type="number" step="any" value="0"></label>
-        <label for="custom-exclusion-width">Width<input aria-label="Custom exclusion width" id="custom-exclusion-width" type="number" min="0.01" step="any" value="50"></label>
-        <label for="custom-exclusion-height">Height<input aria-label="Custom exclusion height" id="custom-exclusion-height" type="number" min="0.01" step="any" value="20"></label>
-      </div>
-      <button class="btn" type="button" onclick="addCustomExclusion()">Add custom exclusion</button>
       <button class="btn" id="custom-exclusion-rename" type="button" onclick="renameSelectedCustomExclusion()" disabled>Rename selected</button>
+      <div class="control-hint">Draw on the canvas. Select a zone to move, resize, or delete it.</div>
       <div id="custom-exclusion-list"></div>
     </fieldset>
     <div id="search-box">
