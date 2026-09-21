@@ -7,10 +7,11 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: 'line',
   use: {
+  baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173',
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
   },
-  webServer: {
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: `${process.platform === 'win32' ? 'python' : 'python3'} -m http.server 4173 --bind 127.0.0.1`,
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
