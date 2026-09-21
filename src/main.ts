@@ -1,386 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="assets/ft-ems-favicon.svg">
-<title>FT EMS Layout Planner</title>
-<script>
-try {
-  const savedPreferences = JSON.parse(localStorage.getItem('ft-ems-preferences') || 'null');
-  const savedTheme = savedPreferences?.theme || localStorage.getItem('ft-ems-theme');
-  if (['classic', 'readable-dark', 'light'].includes(savedTheme)) {
-    document.documentElement.dataset.theme = savedTheme;
-  }
-} catch (_) {}
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
-<script src="layout-ui.js"></script>
-<script src="layout-core.js"></script>
-<script src="model-definition.js"></script>
-<script src="model-definitions.js"></script>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-:root {
-  --bg: #1a1a2e; --panel: #16213e; --accent: #0f3460;
-  --highlight: #e94560; --text: #e0e0e0; --text-dim: #8888aa;
-  --success: #4ecca3; --danger: #e94560;
-  --control-hover: #1a4a8a; --danger-hover: #c73650;
-  --control-border: rgba(255,255,255,0.1); --control-border-hover: rgba(255,255,255,0.2);
-  --surface-hover: rgba(255,255,255,0.06); --surface-hover-soft: rgba(255,255,255,0.04);
-  --surface-hover-faint: rgba(255,255,255,0.05); --surface-hover-strong: rgba(255,255,255,0.1);
-  --hairline-border: rgba(255,255,255,0.04); --subtle-border: rgba(255,255,255,0.06);
-  --modal-backdrop: rgba(0,0,0,0.7); --active-text: #e0e0e0; --danger-text: #e0e0e0;
-  --font-xs: 10px; --font-sm: 11px; --font-md: 12px; --font-base: 13px;
-  --canvas-bg: #0d1117; --canvas-grid: rgba(255,255,255,0.05);
-  --canvas-cell: rgba(255,255,255,0.025); --canvas-frame: #243140;
-  --canvas-dot: rgba(255,255,255,0.18); --canvas-border: #3a5a8a;
-  --canvas-safe: rgba(58,90,138,0.3); --canvas-dimension: #4a6a9a;
-  --canvas-padding: rgba(255,255,255,0.03); --canvas-padding-border: rgba(255,255,255,0.08);
-  --canvas-shadow: rgba(0,0,0,0.25); --canvas-selection: #ffffff;
-  --canvas-hole: rgba(255,255,255,0.1); --canvas-lock: rgba(255,255,255,0.6);
-  --canvas-label: #eeeeee; --collision-fill: rgba(233,69,96,0.3);
-  --exclusion-fill: rgba(233,69,96,0.18); --exclusion-stroke: rgba(233,69,96,0.8);
-  --collision-padding: rgba(233,69,96,0.08); --collision-border: rgba(233,69,96,0.25);
-  --collision-stroke: #e94560;
-}
-:root[data-theme="readable-dark"] {
-  --bg: #0b1220; --panel: #172033; --accent: #3b526f;
-  --highlight: #60a5fa; --text: #f8fafc; --text-dim: #cbd5e1;
-  --success: #34d399; --danger: #e11d48;
-  --control-hover: #4d6b91; --danger-hover: #be123c;
-  --control-border: rgba(255,255,255,0.22); --control-border-hover: rgba(255,255,255,0.4);
-  --surface-hover: rgba(255,255,255,0.1); --surface-hover-soft: rgba(255,255,255,0.07);
-  --surface-hover-faint: rgba(255,255,255,0.08); --surface-hover-strong: rgba(255,255,255,0.16);
-  --hairline-border: rgba(255,255,255,0.08); --subtle-border: rgba(255,255,255,0.12);
-  --active-text: #07111f; --danger-text: #ffffff;
-  --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
-  --canvas-bg: #101827; --canvas-grid: rgba(255,255,255,0.09);
-  --canvas-cell: rgba(255,255,255,0.045); --canvas-frame: #304764;
-  --canvas-dot: rgba(255,255,255,0.32); --canvas-border: #7da2d6;
-  --canvas-safe: rgba(125,162,214,0.55); --canvas-dimension: #cbd5e1;
-  --canvas-padding: rgba(255,255,255,0.055); --canvas-padding-border: rgba(255,255,255,0.16);
-  --canvas-selection: #ffffff; --canvas-label: #ffffff;
-}
-:root[data-theme="light"] {
-  --bg: #eef2f7; --panel: #ffffff; --accent: #cbd5e1;
-  --highlight: #1d4ed8; --text: #172033; --text-dim: #475569;
-  --success: #047857; --danger: #be123c;
-  --control-hover: #b8c5d5; --danger-hover: #9f1239;
-  --control-border: rgba(15,23,42,0.18); --control-border-hover: rgba(15,23,42,0.35);
-  --surface-hover: rgba(15,23,42,0.07); --surface-hover-soft: rgba(15,23,42,0.045);
-  --surface-hover-faint: rgba(15,23,42,0.055); --surface-hover-strong: rgba(15,23,42,0.11);
-  --hairline-border: rgba(15,23,42,0.07); --subtle-border: rgba(15,23,42,0.1);
-  --modal-backdrop: rgba(15,23,42,0.55); --active-text: #ffffff; --danger-text: #ffffff;
-  --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
-  --canvas-bg: #f8fafc; --canvas-grid: rgba(15,23,42,0.09);
-  --canvas-cell: rgba(15,23,42,0.025); --canvas-frame: #d6dee8;
-  --canvas-dot: rgba(15,23,42,0.28); --canvas-border: #64748b;
-  --canvas-safe: rgba(71,85,105,0.45); --canvas-dimension: #334155;
-  --canvas-padding: rgba(15,23,42,0.035); --canvas-padding-border: rgba(15,23,42,0.14);
-  --canvas-shadow: rgba(15,23,42,0.16); --canvas-selection: #0f172a;
-  --canvas-hole: rgba(15,23,42,0.16); --canvas-lock: rgba(15,23,42,0.72);
-  --canvas-label: #0f172a;
-}
-body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+// Transitional boundary: the legacy runtime is now a TS module, but its internal
+// DOM and layout types will be tightened incrementally as it is split up.
+// @ts-nocheck
+import * as THREE from 'three';
+import * as LayoutUI from './ui/layout-ui';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
-/* Top bar */
-#topbar { background: var(--panel); border-bottom: 1px solid var(--accent); padding: 8px 16px; display: flex; align-items: center; gap: 12px; z-index: 10; }
-#topbar h1 { font-size: 18px; font-weight: 600; color: var(--highlight); white-space: nowrap; }
-#topbar h1 span { color: var(--text-dim); font-weight: 400; font-size: var(--font-base); margin-left: 8px; }
-.github-corner { position: fixed; right: 0; bottom: 0; z-index: 20; width: 76px; height: 76px; color: var(--text); overflow: hidden; }
-.github-corner::before { content: ''; position: absolute; right: -38px; bottom: -38px; width: 108px; height: 108px; background: var(--highlight); transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(255,255,255,0.12); }
-.github-corner svg { position: absolute; right: 8px; bottom: 8px; width: 27px; height: 27px; fill: currentColor; transition: transform 0.15s ease; }
-.github-corner:hover svg, .github-corner:focus-visible svg { transform: scale(1.12); }
-.github-corner:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; }
-.author-link { color: var(--highlight); font-size: var(--font-base); font-weight: 500; text-decoration: none; white-space: nowrap; border-bottom: 1px dotted currentColor; }
-.author-link:hover, .author-link:focus-visible { color: var(--text); border-bottom-style: solid; }
-.btn { background: var(--accent); color: var(--text); border: 1px solid var(--control-border); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: var(--font-base); transition: all 0.15s; white-space: nowrap; }
-.btn:hover { background: var(--control-hover); border-color: var(--control-border-hover); }
-.btn-danger { background: var(--danger); color: var(--danger-text); }
-.btn-danger:hover { background: var(--danger-hover); }
-.btn-active, .btn-primary { background: var(--highlight); color: var(--active-text); }
-.theme-select { background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 7px; border-radius: 4px; font-size: var(--font-base); cursor: pointer; }
-.topbar-spacer { flex: 1; }
-.topbar-sep { width: 1px; height: 24px; background: var(--accent); }
-
-/* Main layout */
-#main { display: flex; flex: 1; overflow: hidden; }
-
-/* Sidebar */
-#sidebar { width: 280px; min-width: 280px; background: var(--panel); border-right: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
-#printer-select { padding: 12px; border-bottom: 1px solid var(--accent); }
-#printer-select label { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
-#printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
-#custom-frame-controls, #custom-exclusion-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
-#custom-frame-controls[hidden], #custom-exclusion-controls[hidden] { display: none; }
-#authoring-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
-#authoring-controls[hidden] { display: none; }
-#authoring-controls input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
-#authoring-controls button { width: 100%; margin-top: 6px; }
-#authoring-zone-list { display: grid; gap: 4px; margin-top: 8px; font-size: var(--font-sm); color: var(--text-dim); }
-#authoring-zone-list .authoring-zone-row { display: flex; align-items: center; gap: 6px; border: 1px solid var(--accent); padding: 4px; }
-#authoring-zone-list .authoring-zone-row { cursor: pointer; }
-#authoring-zone-list .authoring-zone-row.selected { border-color: var(--success); background: rgba(78,204,163,.14); }
-#authoring-zone-list .authoring-zone-label { flex: 1; min-width: 0; }
-#authoring-zone-list button { width: auto; margin-top: 0; flex: none; }
-#authoring-zone-list .authoring-zone-delete { border: 0; background: transparent; color: var(--danger); cursor: pointer; font-size: 16px; line-height: 1; }
-#authoring-export { margin-top: 8px; font-size: var(--font-sm); color: var(--text-dim); }
-#authoring-export summary { cursor: pointer; }
-#authoring-export button { margin-top: 6px; }
-#custom-frame-controls legend, #custom-exclusion-controls legend { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-#custom-frame-controls .custom-frame-fields, #custom-exclusion-controls .custom-exclusion-fields { display: flex; gap: 6px; margin: 6px 0; }
-#custom-frame-controls label, #custom-exclusion-controls label { flex: 1; font-size: var(--font-sm); color: var(--text-dim); }
-#custom-frame-controls input, #custom-exclusion-controls input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
-#custom-frame-controls button, #custom-exclusion-controls button { width: 100%; }
-#frame-dimensions { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); }
-#custom-exclusion-list { display: grid; gap: 4px; margin-top: 6px; font-size: var(--font-sm); color: var(--text-dim); }
-#custom-exclusion-list [data-testid="custom-exclusion-row"] { border: 1px solid var(--accent); padding: 4px; }
-#custom-frame-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
-#custom-frame-controls[hidden] { display: none; }
-#custom-frame-controls legend { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-#custom-frame-controls .custom-frame-fields { display: flex; gap: 6px; margin: 6px 0; }
-#custom-frame-controls label { flex: 1; font-size: var(--font-sm); color: var(--text-dim); }
-#custom-frame-controls input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
-#custom-frame-controls button { width: 100%; }
-#frame-dimensions { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); }
-#search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
-#search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
-#search-box input::placeholder { color: var(--text-dim); }
-#component-lib { flex: 1; overflow-y: auto; padding: 8px 0; }
-.cat-header { padding: 8px 12px; font-size: var(--font-sm); text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
-.cat-header:hover { color: var(--text); }
-.cat-header .arrow { transition: transform 0.2s; font-size: 10px; }
-.cat-header.collapsed .arrow { transform: rotate(-90deg); }
-.cat-header .count { margin-left: auto; font-size: var(--font-xs); background: var(--accent); padding: 1px 6px; border-radius: 8px; }
-.cat-items { padding: 0 8px 4px; }
-.cat-items.hidden { display: none; }
-.comp-item { padding: 5px 8px; margin: 1px 0; border-radius: 4px; cursor: grab; font-size: var(--font-md); display: flex; align-items: center; gap: 6px; transition: background 0.1s; }
-.comp-item:hover { background: var(--surface-hover); }
-.comp-item.filtered-out { display: none; }
-.comp-item .thumb { width: 24px; height: 24px; border-radius: 3px; flex-shrink: 0; }
-.comp-item .comp-info { flex: 1; min-width: 0; }
-.comp-item .comp-name { display: block; font-size: var(--font-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.comp-item .dims { color: var(--text-dim); font-size: var(--font-xs); }
-
-/* Canvas area */
-#canvas-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg); }
-#canvas-wrap canvas { position: absolute; top: 0; left: 0; }
-#canvas-info { position: absolute; bottom: 8px; left: 8px; font-size: var(--font-sm); color: var(--text-dim); pointer-events: none; }
-#view-3d { position: absolute; inset: 0; display: none; }
-#topdown-draw-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; display: none; cursor: crosshair; }
-#topdown-draw-layer.active { display: block; }
-#view-3d-status { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; padding: 24px; background: var(--bg); color: var(--text); font-size: var(--font-base); text-align: center; }
-#view-3d-status.visible { display: flex; }
-#view-3d-status.error { inset: auto 16px 16px; display: block; border: 1px solid var(--danger); border-radius: 6px; background: var(--panel); color: var(--danger); pointer-events: none; }
-.object-toolbar { position: absolute; z-index: 5; display: flex; gap: 3px; padding: 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.35); transform: translate(-50%, -100%); }
-.object-toolbar[hidden] { display: none; }
-.object-toolbar.below { transform: translate(-50%, 0); }
-.object-action { width: 30px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; font-size: 16px; line-height: 1; }
-.object-action:hover, .object-action:focus-visible { background: #1a4a8a; outline: none; }
-.object-action.active { background: var(--success); color: #16213e; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); }
-.object-action.active:hover, .object-action.active:focus-visible { background: var(--success); color: #16213e; filter: brightness(1.12); }
-.object-action.delete { margin-left: 3px; border-left: 1px solid rgba(255,255,255,0.2); border-radius: 0 4px 4px 0; color: var(--danger); }
-.object-action.delete:hover, .object-action.delete:focus-visible { background: var(--danger); color: var(--text); }
-
-/* BOM panel */
-#bom-panel { width: 220px; min-width: 220px; background: var(--panel); border-left: 1px solid var(--accent); display: flex; flex-direction: column; overflow: hidden; }
-#bom-panel h3 { padding: 12px; font-size: var(--font-base); border-bottom: 1px solid var(--accent); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
-#bom-panel h3 .btn { padding: 3px 8px; font-size: var(--font-sm); }
-#bom-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
-.bom-item { display: flex; justify-content: space-between; padding: 3px 0; font-size: var(--font-md); border-bottom: 1px solid var(--hairline-border); }
-.bom-item .bom-count { color: var(--highlight); font-weight: 600; }
-#bom-empty { color: var(--text-dim); font-size: var(--font-base); padding: 8px 0; text-align: center; }
-#bom-total { padding: 8px 12px; border-top: 1px solid var(--accent); font-size: var(--font-md); color: var(--text-dim); }
-
-/* Print checklist modal */
-.modal-overlay { position: fixed; inset: 0; background: var(--modal-backdrop); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.modal { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto; }
-.modal h2 { margin-bottom: 16px; color: var(--highlight); }
-.modal table { width: 100%; border-collapse: collapse; font-size: var(--font-base); }
-.modal th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--accent); color: var(--text-dim); font-size: var(--font-sm); text-transform: uppercase; }
-.modal td { padding: 5px 8px; border-bottom: 1px solid var(--subtle-border); }
-.modal .check-col { width: 30px; text-align: center; }
-.modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
-
-/* Suggest Layout Wizard */
-.wizard-modal { max-width: 700px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; }
-.wizard-modal h2 { margin-bottom: 4px; }
-.wizard-printer { font-size: var(--font-base); color: var(--text-dim); margin-bottom: 12px; }
-.wizard-printer strong { color: var(--highlight); }
-.wizard-search { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 4px; font-size: var(--font-base); margin-bottom: 12px; }
-.wizard-search::placeholder { color: var(--text-dim); }
-.wizard-cats { flex: 1; overflow-y: auto; margin-bottom: 12px; }
-.wizard-cat { margin-bottom: 8px; }
-.wizard-cat-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg); border-radius: 4px; cursor: pointer; user-select: none; }
-.wizard-cat-header:hover { background: var(--surface-hover-faint); }
-.wizard-cat-header .arrow { font-size: 10px; transition: transform 0.2s; }
-.wizard-cat-header.collapsed .arrow { transform: rotate(-90deg); }
-.wizard-cat-name { font-size: var(--font-md); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
-.wizard-cat-actions { display: flex; gap: 4px; }
-.wizard-cat-actions button { background: none; border: none; color: var(--text-dim); font-size: var(--font-xs); cursor: pointer; padding: 2px 6px; border-radius: 3px; }
-.wizard-cat-actions button:hover { color: var(--text); background: var(--surface-hover-strong); }
-.wizard-items { padding: 4px 0 4px 16px; }
-.wizard-items.hidden { display: none; }
-.wizard-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 3px; font-size: var(--font-md); cursor: pointer; }
-.wizard-item:hover { background: var(--surface-hover-soft); }
-.wizard-item input[type="checkbox"] { accent-color: var(--highlight); cursor: pointer; }
-.wizard-item .wi-name { flex: 1; }
-.wizard-item .wi-dims { color: var(--text-dim); font-size: var(--font-sm); }
-.wizard-item .wi-quantity { display: flex; align-items: center; gap: 4px; }
-.wizard-item .qty-input { width: 40px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 2px 4px; border-radius: 2px; font-size: var(--font-sm); text-align: center; }
-.wizard-item.filtered-out { display: none; }
-.wizard-footer { display: flex; align-items: center; gap: 12px; }
-.wizard-footer .wizard-count { flex: 1; font-size: var(--font-md); color: var(--text-dim); }
-.wizard-footer .wizard-count strong { color: var(--highlight); }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
-
-@media (max-width: 1400px) {
-  #topbar { gap: 8px; }
-  #topbar h1 span { display: none; }
-  .btn { padding-left: 10px; padding-right: 10px; }
-  .theme-select { max-width: 132px; }
-}
-
-
-.lock-indicator { position: absolute; font-size: 8px; pointer-events: none; }
-
-/* Print styles */
-@media print {
-  body * { visibility: hidden; }
-  .modal-overlay, .modal-overlay * { visibility: visible; }
-  .modal-overlay { position: absolute; inset: 0; background: white; }
-  .modal { color: #000; border: none; max-width: 100%; max-height: none; }
-  .modal h2 { color: #e94560; }
-  .modal th { color: #666; border-bottom-color: #ccc; }
-  .modal td { border-bottom-color: #eee; }
-  .modal-actions { display: none; }
-  .check-col { border: 1px solid #999; width: 18px; height: 18px; }
-}
-</style>
-</head>
-<body>
-
-<div id="topbar">
-  <h1>⚡ FT EMS Layout Planner <span>uses FT EMS components &amp; models by <a class="author-link" href="https://github.com/fizzystech" target="_blank" rel="noopener noreferrer">FizzysTech</a></span></h1>
-  <div class="topbar-spacer"></div>
-  <button class="btn" id="btn-2d" onclick="setView('2d')">📐 2D Layout</button>
-  <button class="btn" id="btn-3d" onclick="if (location.protocol === 'file:') { document.getElementById('view-3d').style.display = 'block'; const status = document.getElementById('view-3d-status'); status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.'; status.className = 'visible error'; } else { setView('3d'); }">🧊 3D View</button>
-  <button class="btn" id="btn-3d" onclick="setPerspective3D()">🧊 3D View</button>
-  <button class="btn" id="btn-topdown" hidden onclick="setTopDown3D()">🔭 Top-down 3D</button>
-  <div class="topbar-sep"></div>
-  <button class="btn" onclick="saveLayout()">💾 Save</button>
-  <button class="btn" onclick="loadLayout()">📂 Load</button>
-  <button class="btn btn-danger" onclick="clearLayout()">🗑 Clear</button>
-  <button class="btn" onclick="exportImage()">🖼 Export</button>
-  <div class="topbar-sep"></div>
-  <button class="btn btn-primary" onclick="showSuggestLayout()">✨ Suggest Layout</button>
-  <button class="btn" id="btn-autoplace" onclick="autoPlaceExisting()">🧩 Auto Place</button>
-  <div class="topbar-sep"></div>
-  <select id="theme-select" class="theme-select" aria-label="Color theme" title="Color theme" onchange="setTheme(this.value)">
-    <option value="classic">🎨 Classic</option>
-    <option value="readable-dark">🌙 Readable Dark</option>
-    <option value="light">☀️ Light</option>
-  </select>
-</div>
-
-<a class="github-corner" href="https://github.com/akashrpatel/ft-ems-visualizer" target="_blank" rel="noopener noreferrer" aria-label="View this project on GitHub" title="View this project on GitHub">
-  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-</a>
-
-<div id="main">
-  <div id="sidebar">
-    <div id="printer-select">
-      <label for="printer">Printer Model</label>
-      <select id="printer" onchange="onPrinterChange()"></select>
-    </div>
-    <fieldset id="authoring-controls" hidden>
-      <legend>Model exclusions</legend>
-      <label>Zone name
-        <input id="authoring-zone-name" aria-label="Zone name" placeholder="Raised rail">
-      </label>
-      <button class="btn" id="authoring-draw" type="button" onclick="toggleAuthoringDraw()">Draw exclusion</button>
-      <button class="btn" id="authoring-rename" type="button" onclick="renameSelectedAuthoringZone()" disabled>Rename selected</button>
-      <div id="authoring-zone-list"></div>
-      <details id="authoring-export">
-        <summary>Advanced</summary>
-        <button class="btn" type="button" onclick="exportModelDefinition()">Save model definition</button>
-      </details>
-    </fieldset>
-    <fieldset id="custom-frame-controls" hidden>
-      <legend>Custom frame</legend>
-      <div class="custom-frame-fields">
-        <label for="custom-frame-width">Width (mm)
-          <input id="custom-frame-width" aria-label="Custom frame width (mm)" type="number" min="1" step="any" value="400">
-        </label>
-        <label for="custom-frame-height">Height (mm)
-          <input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="any" value="400">
-          <input id="custom-frame-width" aria-label="Custom frame width (mm)" type="number" min="1" step="1" value="400">
-        </label>
-        <label for="custom-frame-height">Height (mm)
-          <input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="1" value="400">
-        </label>
-      </div>
-      <button class="btn" type="button" onclick="applyCustomFrame()">Apply custom frame</button>
-      <div id="frame-dimensions" aria-label="Frame dimensions" aria-live="polite"></div>
-    </fieldset>
-    <fieldset id="custom-exclusion-controls" hidden>
-      <legend>Custom exclusions</legend>
-      <label>Exclusion ID <input aria-label="Custom exclusion ID" id="custom-exclusion-id"></label>
-      <label>Name <input aria-label="Custom exclusion name" id="custom-exclusion-name"></label>
-      <div class="custom-exclusion-fields">
-        <label>X <input aria-label="Custom exclusion X" id="custom-exclusion-x" type="number" step="any"></label>
-        <label>Y <input aria-label="Custom exclusion Y" id="custom-exclusion-y" type="number" step="any"></label>
-      </div>
-      <div class="custom-exclusion-fields">
-        <label>Width <input aria-label="Custom exclusion width" id="custom-exclusion-width" type="number" min="0.01" step="any"></label>
-        <label>Height <input aria-label="Custom exclusion height" id="custom-exclusion-height" type="number" min="0.01" step="any"></label>
-      </div>
-      <button class="btn" type="button" onclick="addCustomExclusion()">Add custom exclusion</button>
-      <div id="custom-exclusion-list"></div>
-    </fieldset>
-    <div id="search-box">
-      <input type="text" id="search" placeholder="🔍 Search components..." oninput="onSearch()">
-    </div>
-    <div id="component-lib"></div>
-  </div>
-  <div id="canvas-wrap">
-    <canvas id="canvas"></canvas>
-    <div id="view-3d"><div id="view-3d-status" role="status" aria-live="polite"></div><canvas id="topdown-draw-layer" aria-label="Top-down exclusion drawing surface"></canvas></div>
-    <div id="object-toolbar" class="object-toolbar" role="toolbar" aria-label="Selected component actions" hidden>
-      <button class="object-action" type="button" title="Duplicate (D)" aria-label="Duplicate selected component" aria-keyshortcuts="D" onclick="duplicateSelected()">⧉</button>
-      <button class="object-action" type="button" title="Rotate 90° (R)" aria-label="Rotate selected component 90 degrees" aria-keyshortcuts="R" onclick="rotateComponent(selected)">↻</button>
-      <button class="object-action" id="object-lock" type="button" title="Lock (L)" aria-label="Lock selected component" aria-keyshortcuts="L" onclick="toggleSelectedLock()">🔓</button>
-      <button class="object-action delete" type="button" title="Delete (Del)" aria-label="Delete selected component" aria-keyshortcuts="Delete" onclick="removeSelected()">×</button>
-    </div>
-    <div id="canvas-info">Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | Del: Remove</div>
-  </div>
-  <div id="bom-panel">
-    <h3>📋 Parts List <button class="btn" onclick="showChecklist()">🖨</button></h3>
-    <div id="bom-list"><div id="bom-empty">No components placed</div></div>
-    <div id="bom-total"></div>
-  </div>
-</div>
-
-<script type="module" src="/src/main.ts"></script>
-<script>
-// ES modules cannot execute from a file:// page. Keep the old guidance usable
-// when someone double-clicks index.html instead of starting the dev server.
-if (location.protocol === 'file:') {
-  window.setView = function setFileView(view) {
-    if (view !== '3d') return;
-    document.getElementById('view-3d').style.display = 'block';
-    const status = document.getElementById('view-3d-status');
-    status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.';
-    status.className = 'visible error';
 // ============== DATA ==============
-const BASE_PRINTERS = [
+const PRINTERS = [
   { id: 'v0-120',       name: 'Voron V0 — 120mm',       w: 226, h: 124, frameStls: [
     { stl: 'ems-files/FT-EMS Frame-v0.stl' },
   ]},
@@ -415,12 +42,7 @@ const BASE_PRINTERS = [
     { stl: 'ems-files/ft-ems-trident-doom-rear-3-4.stl' },
     { stl: 'ems-files/ft-ems-trident-doom-rear-4-4.stl' },
   ]},
-  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, frameStls: [
-  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, exclusionZones: [
-    // Rounded outward from the raised rail's transformed STL bounds:
-    // x 52.606..257.606, y 17.919..38.178 mm.
-    { id: 'switchwire-raised-rail', name: 'Raised electronics rail', rect: { x: 52, y: 17, w: 206, h: 22 } },
-  ], frameStls: [
+  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameStls: [
     { stl: 'ems-files/FT EMS SW Frame V2.stl' },
   ]},
   { id: 'micron-180',   name: 'Micron 180',              w: 280, h: 287, frameStls: [
@@ -445,7 +67,6 @@ const BASE_PRINTERS = [
     { stl: 'ems-files/FT_ems_swc_v2_frame.stl' },
   ]},
 ];
-const PRINTERS = ModelDefinition.applyModelDefinitions(BASE_PRINTERS, window.MODEL_DEFINITIONS);
 
 const CATEGORIES = [
   { id: 'mcu', name: 'MCU / Controller Boards', color: '#4e79a7', items: [
@@ -573,20 +194,11 @@ const SA_WEIGHTS = {
 };
 
 // ============== STATE ==============
-const LOCAL_DEVELOPMENT_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-const IS_LOCAL_DEVELOPMENT = LOCAL_DEVELOPMENT_HOSTS.has(location.hostname);
-const AUTHORING_MODE = IS_LOCAL_DEVELOPMENT && new URLSearchParams(location.search).get('mode') === 'authoring';
-let customExclusionZones = [];
 let printer = PRINTERS[6];
 let placed = [];
 let selected = null;
 let nextId = 1;
 let currentView = '2d';
-let topDown3D = false;
-let topDownDrawStart = null;
-let topDownDrawPreview = null;
-let topDownSelectedZoneId = null;
-let topDownZoneDrag = null;
 
 const PREFERENCES_STORAGE_KEY = 'ft-ems-preferences';
 const VALID_THEMES = new Set(['classic', 'readable-dark', 'light']);
@@ -619,7 +231,6 @@ const cvs = document.getElementById('canvas');
 const ctx = cvs.getContext('2d');
 let scale = 1.5, panX = 60, panY = 60;
 let dragging = null, panning = false, panStart = {x:0,y:0};
-let authoringDrawing = false, authoringDrag = null, authoringPreview = null;
 
 const HEX_SPACING = 11; // 11mm between columns (22mm center-to-center hex grid)
 const HEX_ROW = 11 * Math.sqrt(3); // ~19.05mm between rows
@@ -694,7 +305,7 @@ function processThumbQueue() {
 
 
 // 3D Scene
-let scene3d, camera3d, topDownCamera, renderer3d, controls3d;
+let scene3d, camera3d, renderer3d, controls3d;
 let stlCache = {};
 const stlLoads = new Map();
 let sceneBuildVersion = 0;
@@ -704,7 +315,7 @@ function loadStl(path) {
   if (stlLoads.has(path)) return stlLoads.get(path);
 
   const pending = new Promise((resolve, reject) => {
-    new THREE.STLLoader().load(path, (geometry) => {
+    new STLLoader().load(path, (geometry) => {
       stlCache[path] = geometry;
       resolve(geometry);
     }, undefined, () => reject(new Error(`Could not load ${path}`)));
@@ -779,24 +390,15 @@ function setTheme(theme) {
 function init() {
   const preferences = readPreferences();
   initTheme();
-  document.getElementById('authoring-controls').hidden = !AUTHORING_MODE;
-  document.getElementById('btn-topdown').hidden = !AUTHORING_MODE;
   const sel = document.getElementById('printer');
   PRINTERS.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p.id; opt.textContent = p.name;
     sel.appendChild(opt);
   });
-  const customOption = document.createElement('option');
-  customOption.value = 'custom';
-  customOption.textContent = 'Custom frame';
-  sel.appendChild(customOption);
-  sel.value = printer.id;
-  renderAuthoringZones();
   const savedPrinter = PRINTERS.find(p => p.id === preferences.printerId);
   if (savedPrinter) printer = savedPrinter;
   sel.value = printer.id;
-  updateFrameDimensions();
   buildLibrary();
   const search = document.getElementById('search');
   search.value = preferences.search;
@@ -869,14 +471,11 @@ function setView(v) {
   document.getElementById('btn-3d').classList.toggle('btn-active', v === '3d');
   document.getElementById('canvas').style.display = v === '2d' ? 'block' : 'none';
   document.getElementById('view-3d').style.display = v === '3d' ? 'block' : 'none';
-  updateTopDownDrawingSurface();
   updateObjectToolbar();
   document.getElementById('canvas-info').textContent = v === '2d'
     ? 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove'
     : 'Drag: Orbit | Scroll: Zoom | Right-drag: Pan';
-  if (v === '2d') {
-    resizeCanvas(); draw();
-  }
+  if (v === '2d') { resizeCanvas(); draw(); }
   else if (location.protocol === 'file:') {
     const status = document.getElementById('view-3d-status');
     status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.';
@@ -886,240 +485,9 @@ function setView(v) {
 
 // ============== PRINTER ==============
 function onPrinterChange() {
-  const selectedId = document.getElementById('printer').value;
-  if (selectedId === 'custom') {
-    updateCustomFrameVisibility();
-    updateCustomExclusionVisibility();
-    return;
-  }
-  printer = PRINTERS.find(p => p.id === selectedId);
-  topDownSelectedZoneId = null;
-  const rename = document.getElementById('authoring-rename');
-  if (rename) rename.disabled = true;
-  renderAuthoringZones();
-  updateFrameDimensions();
-    return;
-  }
-  printer = PRINTERS.find(p => p.id === selectedId);
-  updateFrameDimensions();
   printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
   writePreferences({ printerId: printer.id });
   centerView(); draw();
-  if (currentView === '3d') refresh3DScene();
-}
-
-function setPerspective3D() {
-  topDown3D = false;
-  if (controls3d) controls3d.enabled = true;
-  setView('3d');
-}
-
-function setTopDown3D() {
-  topDown3D = true;
-  if (controls3d) controls3d.enabled = false;
-  setView('3d');
-}
-
-function updateTopDownDrawingSurface() {
-  const layer = document.getElementById('topdown-draw-layer');
-  if (!layer) return;
-  layer.classList.toggle('active', AUTHORING_MODE && topDown3D && currentView === '3d');
-  if (topDown3D && currentView === '3d') resizeTopDownDrawingSurface();
-}
-
-function updateFrameDimensions() {
-  updateCustomFrameVisibility();
-  updateCustomExclusionVisibility();
-  document.getElementById('frame-dimensions').textContent =
-    `${printer.id === 'custom' ? 'Custom frame' : printer.name}: ${printer.w} × ${printer.h} mm`;
-function updateFrameDimensions() {
-  updateCustomFrameVisibility();
-  document.getElementById('frame-dimensions').textContent =
-    `${printer.name.startsWith('Custom') ? 'Custom frame' : printer.name}: ${printer.w} × ${printer.h} mm`;
-}
-
-function updateCustomFrameVisibility() {
-  const controls = document.getElementById('custom-frame-controls');
-  controls.hidden = document.getElementById('printer').value !== 'custom';
-}
-
-function updateCustomExclusionVisibility() {
-  const controls = document.getElementById('custom-exclusion-controls');
-  controls.hidden = document.getElementById('printer').value !== 'custom';
-  renderCustomExclusions();
-  const select = document.getElementById('printer');
-  controls.hidden = !select || select.value !== 'custom';
-}
-
-function applyCustomFrame() {
-  const width = Number(document.getElementById('custom-frame-width').value);
-  const height = Number(document.getElementById('custom-frame-height').value);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
-  printer = { id: 'custom', name: `Custom — ${width}×${height}mm`, w: width, h: height, exclusionZones: customExclusionZones };
-  document.getElementById('printer').value = 'custom';
-  updateFrameDimensions();
-  centerView(); draw();
-  if (currentView === '3d') refresh3DScene();
-}
-
-function addCustomExclusion() {
-  const zone = {
-    id: document.getElementById('custom-exclusion-id').value.trim(),
-    name: document.getElementById('custom-exclusion-name').value.trim(),
-    type: 'custom',
-    rect: {
-      x: Number(document.getElementById('custom-exclusion-x').value),
-      y: Number(document.getElementById('custom-exclusion-y').value),
-      w: Number(document.getElementById('custom-exclusion-width').value),
-      h: Number(document.getElementById('custom-exclusion-height').value),
-    },
-  };
-  if (!zone.id || !zone.name || ![zone.rect.x, zone.rect.y, zone.rect.w, zone.rect.h].every(Number.isFinite) || zone.rect.w <= 0 || zone.rect.h <= 0) return;
-  if (customExclusionZones.some(existing => existing.id === zone.id)) return;
-  customExclusionZones.push(zone);
-  if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
-  renderCustomExclusions();
-  draw();
-}
-
-function renderCustomExclusions() {
-  const list = document.getElementById('custom-exclusion-list');
-  if (!list) return;
-  list.replaceChildren(...customExclusionZones.map(zone => {
-    const row = document.createElement('div');
-    row.dataset.testid = 'custom-exclusion-row';
-    row.textContent = `${zone.name} — ${formatMm(zone.rect.w)} × ${formatMm(zone.rect.h)} mm`;
-    return row;
-  }));
-}
-
-function renderAuthoringZones() {
-  const list = document.getElementById('authoring-zone-list');
-  if (!list) return;
-  list.replaceChildren(...(printer.exclusionZones || []).map(zone => {
-    const row = document.createElement('div');
-    row.className = 'authoring-zone-row';
-    row.classList.toggle('selected', zone.id === topDownSelectedZoneId);
-    row.title = 'Select exclusion';
-    row.addEventListener('click', () => selectAuthoringZone(zone.id));
-    const label = document.createElement('span');
-    label.className = 'authoring-zone-label';
-    label.textContent = `${zone.name || zone.id} — ${formatMm(zone.rect?.w)} × ${formatMm(zone.rect?.h)} mm`;
-    const remove = document.createElement('button');
-    remove.className = 'authoring-zone-delete';
-    remove.type = 'button';
-    remove.title = `Delete ${zone.name || zone.id}`;
-    remove.setAttribute('aria-label', `Delete ${zone.name || zone.id}`);
-    remove.textContent = '×';
-    remove.addEventListener('click', event => {
-      event.stopPropagation();
-      deleteAuthoringZone(zone.id);
-    });
-    row.append(label, remove);
-    return row;
-  }));
-}
-
-function selectAuthoringZone(id) {
-  topDownSelectedZoneId = id;
-  const zone = (printer.exclusionZones || []).find(item => item.id === id);
-  const input = document.getElementById('authoring-zone-name');
-  const rename = document.getElementById('authoring-rename');
-  if (zone && input) input.value = zone.name || zone.id;
-  if (rename) rename.disabled = !zone;
-  renderAuthoringZones();
-  if (currentView === '3d' && topDown3D) drawTopDownPreview();
-  draw();
-}
-
-function renameSelectedAuthoringZone() {
-  const zone = (printer.exclusionZones || []).find(item => item.id === topDownSelectedZoneId);
-  const name = document.getElementById('authoring-zone-name').value.trim();
-  if (!zone || !name) return;
-  zone.name = name;
-  renderAuthoringZones();
-  drawTopDownPreview();
-  draw();
-}
-
-function formatMm(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '';
-  return String(Math.round(number * 10) / 10);
-}
-
-function deleteAuthoringZone(id) {
-  printer.exclusionZones = (printer.exclusionZones || []).filter(zone => zone.id !== id);
-  if (topDownSelectedZoneId === id) topDownSelectedZoneId = null;
-  renderAuthoringZones();
-  drawTopDownPreview();
-  draw();
-  if (currentView === '3d') refresh3DScene();
-}
-
-function toggleAuthoringDraw() {
-  authoringDrawing = !authoringDrawing;
-  const button = document.getElementById('authoring-draw');
-  button.textContent = authoringDrawing ? 'Cancel drawing' : 'Draw exclusion';
-  cvs.style.cursor = authoringDrawing ? 'crosshair' : 'default';
-  updateTopDownDrawingSurface();
-}
-
-function nextAuthoringZoneId(name) {
-  const base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exclusion';
-  let id = base, suffix = 2;
-  while ((printer.exclusionZones || []).some(zone => zone.id === id)) id = `${base}-${suffix++}`;
-  return id;
-}
-
-function addAuthoringZone(rect) {
-  const name = document.getElementById('authoring-zone-name').value.trim() || 'Custom exclusion';
-  const zone = { id: nextAuthoringZoneId(name), name, type: 'custom', rect };
-  printer.exclusionZones = [...(printer.exclusionZones || []), zone];
-  topDownSelectedZoneId = zone.id;
-  renderAuthoringZones();
-  const rename = document.getElementById('authoring-rename');
-  if (rename) rename.disabled = false;
-  draw();
-  drawTopDownPreview();
-  if (currentView === '3d') refresh3DScene();
-}
-
-function exportModelDefinition() {
-  const definition = ModelDefinition.createModelDefinition({
-    id: printer.id,
-    name: printer.name,
-    version: printer.definitionVersion || 1,
-    frame: { x: 0, y: 0, w: printer.w, h: printer.h },
-    exclusionZones: printer.exclusionZones || [],
-  });
-  const blob = new Blob([ModelDefinition.serializeModelDefinition(definition)], { type: 'application/json' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `ft-ems-model-${printer.id}.json`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
-  const status = document.getElementById('frame-dimensions');
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    status.textContent = 'Enter positive width and height values.';
-    return;
-  }
-
-  printer = { id: 'custom', name: `Custom — ${width}×${height}mm`, w: width, h: height };
-  const select = document.getElementById('printer');
-  let option = select.querySelector('option[value="custom"]');
-  if (!option) {
-    option = document.createElement('option');
-    option.value = 'custom';
-    select.appendChild(option);
-  }
-  option.textContent = printer.name;
-  select.value = 'custom';
-  updateFrameDimensions();
-  centerView();
-  draw();
   if (currentView === '3d') refresh3DScene();
 }
 
@@ -1214,15 +582,21 @@ function addComponent(comp, color) {
     w: comp.w, h: comp.h, rotation: 0, catColor: color, stl: comp.stl || '',
     orient: comp.orient || 'flat',
   };
+  autoFitRotation(c);
+  clampToFrame(c);
+  placed.push(c); selected = c;
+  updateBOM(); draw();
+  if (currentView === '3d') refresh3DScene();
 }
 
 function snap(v) {
-  // Existing component anchors snap each top-left coordinate independently.
-  return LayoutCore.snapCoordinate(v, HEX_SPACING);
+  // Snap to nearest hex grid position
+  return Math.round(v / HEX_SPACING) * HEX_SPACING;
 }
 
 function snapUp(v) {
-  return LayoutCore.snapUpCoordinate(v, HEX_SPACING);
+  // Snap to next higher hex grid position (ensures we move away from boundaries)
+  return Math.ceil(v / HEX_SPACING) * HEX_SPACING;
 }
 
 function removeSelected() {
@@ -1243,7 +617,8 @@ function resizeCanvas() {
 function toCanvas(mx, my) { return { x: (mx - panX) / scale, y: (my - panY) / scale }; }
 
 function getBounds(c) {
-  return LayoutCore.getBounds(c);
+  if (c.rotation % 2 === 0) return { x: c.x, y: c.y, w: c.w, h: c.h };
+  return { x: c.x, y: c.y, w: c.h, h: c.w };
 }
 
 function rotateComponent(c) {
@@ -1282,73 +657,29 @@ function hitTest(mx, my) {
   return null;
 }
 
-function annotateLayoutIssues() {
-  const metadataIssues = LayoutCore.validateExclusionZones(printer.exclusionZones || []);
-  if (metadataIssues.length) {
-    for (const c of placed) {
-      c._issues = metadataIssues;
-      c._col = true;
+function checkCollisions() {
+  for (const c of placed) c._col = false;
+  for (let i = 0; i < placed.length; i++) {
+    const a = getBounds(placed[i]);
+    for (let j = i + 1; j < placed.length; j++) {
+      const b = getBounds(placed[j]);
+      // Include padding around each component for cable duct clearance
+      if (a.x - COMP_PAD < b.x + b.w + COMP_PAD && a.x + a.w + COMP_PAD > b.x - COMP_PAD &&
+          a.y - COMP_PAD < b.y + b.h + COMP_PAD && a.y + a.h + COMP_PAD > b.y - COMP_PAD) {
+        placed[i]._col = true; placed[j]._col = true;
+      }
     }
-    const issue = metadataIssues[0];
-    document.getElementById('canvas-info').textContent = `Invalid exclusion metadata: ${issue.zoneId} (${issue.reason})`;
-    return;
   }
-  for (const c of placed) {
-    c._issues = LayoutCore.getPlacementIssues(c, placed, printer, {
-      padding: COMP_PAD,
-      exclusionPadding: COMP_PAD,
-    });
-    c._col = c._issues.length > 0;
-  }
-  const info = document.getElementById('canvas-info');
-  const issueOwner = selected?._issues?.length ? selected : placed.find(c => c._issues?.length);
-  const issue = issueOwner?._issues?.[0];
-  const prefix = selected === issueOwner ? '' : `Layout invalid: ${issueOwner?.name} — `;
-  if (issue?.type === 'excluded-area') info.textContent = `${prefix}Inside exclusion: ${issue.zoneName || issue.zoneId}`;
-  else if (issue?.type === 'invalid-exclusion-zone') info.textContent = `Invalid exclusion metadata: ${issue.zoneId} (${issue.reason})`;
-  else if (issue?.type === 'component-collision') info.textContent = `${prefix}Overlaps another component`;
-  else if (issue?.type === 'outside-frame') info.textContent = `${prefix}Outside printer frame`;
-  else info.textContent = 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove';
 }
 
 function drawHex(cx, cy, r) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 3 * i;
+    const a = Math.PI / 3 * i - Math.PI / 6;
     const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.closePath();
-}
-
-function drawHoneycombGrid() {
-  const radius = 9;
-  const columnStep = radius * 1.5;
-  const rowStep = radius * Math.sqrt(3);
-  const startX = -radius;
-  const startY = -radius;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
-  ctx.clip();
-  ctx.fillStyle = themeColor('--canvas-bg');
-  ctx.fillRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
-  ctx.lineWidth = 3.6 / scale;
-  ctx.strokeStyle = themeColor('--canvas-frame');
-  ctx.fillStyle = themeColor('--canvas-cell');
-
-  let column = 0;
-  for (let x = startX; x <= printer.w + radius; x += columnStep) {
-    const yOffset = (column % 2) * rowStep / 2;
-    for (let y = startY + yOffset; y <= printer.h + radius; y += rowStep) {
-      drawHex(x, y, radius);
-      ctx.fill();
-      ctx.stroke();
-    }
-    column++;
-  }
-  ctx.restore();
 }
 
 function updateObjectToolbar() {
@@ -1398,21 +729,25 @@ function draw() {
   ctx.translate(panX, panY);
   ctx.scale(scale, scale);
 
-  // Solid printed frame and inset honeycomb field.
-  ctx.fillStyle = themeColor('--canvas-frame');
+  // Frame bg
+  ctx.fillStyle = themeColor('--canvas-bg');
   ctx.fillRect(0, 0, printer.w, printer.h);
-  drawHoneycombGrid();
 
-  drawExclusionZones(ctx, 1 / scale);
-
-  drawExclusionZones(ctx, 1 / scale);
-  drawAuthoringZoneControls(ctx, 1 / scale);
-  if (authoringPreview) {
-    ctx.fillStyle = 'rgba(78,204,163,.28)';
-    ctx.strokeStyle = '#4ecca3';
-    ctx.lineWidth = 1 / scale;
-    ctx.fillRect(authoringPreview.x, authoringPreview.y, authoringPreview.w, authoringPreview.h);
-    ctx.strokeRect(authoringPreview.x, authoringPreview.y, authoringPreview.w, authoringPreview.h);
+  // Hex grid — matches FT EMS standoff pattern (22mm center-to-center)
+  let col = 0;
+  for (let x = HEX_OFFSET_X; x <= printer.w - HEX_OFFSET_X; x += HEX_SPACING) {
+    const yOff = (col % 2 === 0) ? HEX_OFFSET_Y : HEX_OFFSET_Y + HEX_ROW / 2;
+    for (let y = yOff; y <= printer.h - HEX_OFFSET_Y; y += HEX_ROW) {
+      // Map from panel-bottom-origin to canvas-top-origin
+      const cy = printer.h - y;
+      ctx.strokeStyle = themeColor('--canvas-grid');
+      ctx.lineWidth = 0.3 / scale;
+      drawHex(x, cy, HEX_R);
+      ctx.stroke();
+      ctx.fillStyle = themeColor('--canvas-dot');
+      ctx.beginPath(); ctx.arc(x, cy, 1.0, 0, Math.PI * 2); ctx.fill();
+    }
+    col++;
   }
 
   // Frame border
@@ -1435,7 +770,7 @@ function draw() {
 
 
   // Components
-  annotateLayoutIssues();
+  checkCollisions();
   for (const c of placed) {
     const b = getBounds(c), isSel = c === selected;
     
@@ -1486,28 +821,6 @@ function draw() {
   ctx.restore();
 }
 
-function drawExclusionZones(target, lineWidth = 1) {
-  if (LayoutCore.validateExclusionZones(printer.exclusionZones || []).length) return;
-  target.save();
-  target.beginPath();
-  target.rect(0, 0, printer.w, printer.h);
-  target.clip();
-  target.fillStyle = themeColor('--exclusion-fill');
-  target.strokeStyle = themeColor('--exclusion-stroke');
-  target.lineWidth = lineWidth;
-  for (const zone of printer.exclusionZones || []) {
-    const points = LayoutCore.getExclusionPoints(zone);
-    if (!points.length) continue;
-    target.beginPath();
-    target.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) target.lineTo(points[i].x, points[i].y);
-    target.closePath();
-    target.fill();
-    target.stroke();
-  }
-  target.restore();
-}
-
 function wrapText(text, x, y, maxW, lineH) {
   const words = text.split(' ');
   let lines = [], line = '';
@@ -1537,230 +850,12 @@ function setupCanvasEvents() {
   cvs.addEventListener('wheel', onWheel, { passive: false });
   cvs.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('keydown', onKey);
-  const topDownLayer = document.getElementById('topdown-draw-layer');
-  topDownLayer.addEventListener('mousedown', onTopDownMouseDown);
-  topDownLayer.addEventListener('mousemove', onTopDownMouseMove);
-  topDownLayer.addEventListener('mouseup', onTopDownMouseUp);
-}
-
-function drawAuthoringZoneControls(target, lineWidth = 1) {
-  if (!AUTHORING_MODE || !topDownSelectedZoneId) return;
-  const zone = (printer.exclusionZones || []).find(item => item.id === topDownSelectedZoneId);
-  if (!zone?.rect) return;
-  const { x, y, w, h } = zone.rect;
-  target.save();
-  target.fillStyle = 'rgba(78,204,163,.18)';
-  target.strokeStyle = '#4ecca3';
-  target.lineWidth = 2 * lineWidth;
-  target.fillRect(x, y, w, h);
-  target.strokeRect(x, y, w, h);
-  target.fillStyle = '#4ecca3';
-  for (const point of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
-    target.fillRect(point[0] - 5 * lineWidth, point[1] - 5 * lineWidth, 10 * lineWidth, 10 * lineWidth);
-  }
-  target.fillStyle = '#e94560';
-  target.fillRect(x + w - 12 * lineWidth, y - 12 * lineWidth, 18 * lineWidth, 18 * lineWidth);
-  target.strokeStyle = '#ffffff';
-  target.lineWidth = 2 * lineWidth;
-  target.beginPath();
-  target.moveTo(x + w - 8 * lineWidth, y - 8 * lineWidth);
-  target.lineTo(x + w + 2 * lineWidth, y + 2 * lineWidth);
-  target.moveTo(x + w + 2 * lineWidth, y - 8 * lineWidth);
-  target.lineTo(x + w - 8 * lineWidth, y + 2 * lineWidth);
-  target.stroke();
-  target.restore();
-}
-
-function topDownFrameRect() {
-  const layer = document.getElementById('topdown-draw-layer');
-  const aspect = layer.width / layer.height;
-  const frameAspect = printer.w / printer.h;
-  let width, height;
-  if (aspect > frameAspect) { height = layer.height; width = height * frameAspect; }
-  else { width = layer.width; height = width / frameAspect; }
-  return { x: (layer.width - width) / 2, y: (layer.height - height) / 2, width, height };
-}
-
-function topDownPoint(event) {
-  const layer = document.getElementById('topdown-draw-layer');
-  const bounds = layer.getBoundingClientRect();
-  const frame = topDownFrameRect();
-  return {
-    x: Math.max(0, Math.min(printer.w, (event.clientX - bounds.left - frame.x) * printer.w / frame.width)),
-    y: Math.max(0, Math.min(printer.h, (event.clientY - bounds.top - frame.y) * printer.h / frame.height)),
-  };
-}
-
-function drawTopDownPreview() {
-  const layer = document.getElementById('topdown-draw-layer');
-  const layerCtx = layer.getContext('2d');
-  layerCtx.clearRect(0, 0, layer.width, layer.height);
-  const frame = topDownFrameRect();
-  const toPixels = zone => ({
-    x: frame.x + zone.x * frame.width / printer.w,
-    y: frame.y + zone.y * frame.height / printer.h,
-    w: zone.w * frame.width / printer.w,
-    h: zone.h * frame.height / printer.h,
-  });
-  layerCtx.lineWidth = 2;
-  for (const zone of printer.exclusionZones || []) {
-    const rect = toPixels(zone.rect);
-    const selected = zone.id === topDownSelectedZoneId;
-    layerCtx.fillStyle = selected ? 'rgba(78,204,163,.18)' : 'rgba(233,69,96,.12)';
-    layerCtx.strokeStyle = selected ? '#4ecca3' : '#e94560';
-    layerCtx.fillRect(rect.x, rect.y, rect.w, rect.h);
-    layerCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-    if (selected) {
-      layerCtx.fillStyle = '#4ecca3';
-      for (const point of [[rect.x, rect.y], [rect.x + rect.w, rect.y], [rect.x, rect.y + rect.h], [rect.x + rect.w, rect.y + rect.h]]) {
-        layerCtx.fillRect(point[0] - 5, point[1] - 5, 10, 10);
-      }
-      layerCtx.fillStyle = '#e94560';
-      layerCtx.fillRect(rect.x + rect.w - 12, rect.y - 12, 18, 18);
-      layerCtx.strokeStyle = '#ffffff';
-      layerCtx.lineWidth = 2;
-      layerCtx.beginPath();
-      layerCtx.moveTo(rect.x + rect.w - 8, rect.y - 8);
-      layerCtx.lineTo(rect.x + rect.w + 2, rect.y + 2);
-      layerCtx.moveTo(rect.x + rect.w + 2, rect.y - 8);
-      layerCtx.lineTo(rect.x + rect.w - 8, rect.y + 2);
-      layerCtx.stroke();
-    }
-  }
-  if (topDownDrawPreview) {
-    const rect = toPixels(topDownDrawPreview);
-    layerCtx.fillStyle = 'rgba(78,204,163,.28)';
-    layerCtx.strokeStyle = '#4ecca3';
-    layerCtx.lineWidth = 2;
-    layerCtx.fillRect(rect.x, rect.y, rect.w, rect.h);
-    layerCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-  }
-}
-
-function resizeTopDownDrawingSurface() {
-  const layer = document.getElementById('topdown-draw-layer');
-  if (!layer) return;
-  const container = document.getElementById('view-3d');
-  layer.width = Math.max(1, Math.round(container.clientWidth));
-  layer.height = Math.max(1, Math.round(container.clientHeight));
-  drawTopDownPreview();
-}
-
-function onTopDownMouseDown(event) {
-  if (event.button !== 0) return;
-  const point = topDownPoint(event);
-  const frame = topDownFrameRect();
-  const px = event.clientX - document.getElementById('topdown-draw-layer').getBoundingClientRect().left;
-  const py = event.clientY - document.getElementById('topdown-draw-layer').getBoundingClientRect().top;
-  const hit = [...(printer.exclusionZones || [])].reverse().find(zone => {
-    const r = { x: frame.x + zone.rect.x * frame.width / printer.w, y: frame.y + zone.rect.y * frame.height / printer.h, w: zone.rect.w * frame.width / printer.w, h: zone.rect.h * frame.height / printer.h };
-    return px >= r.x - 8 && px <= r.x + r.w + 8 && py >= r.y - 14 && py <= r.y + r.h + 8;
-  });
-  if (hit) {
-    const rect = { x: frame.x + hit.rect.x * frame.width / printer.w, y: frame.y + hit.rect.y * frame.height / printer.h, w: hit.rect.w * frame.width / printer.w, h: hit.rect.h * frame.height / printer.h };
-    selectAuthoringZone(hit.id);
-    if (px >= rect.x + rect.w - 14 && px <= rect.x + rect.w + 8 && py >= rect.y - 14 && py <= rect.y + 10) {
-      deleteAuthoringZone(hit.id);
-      event.preventDefault();
-      return;
-    }
-    const corners = [[rect.x, rect.y, 'nw'], [rect.x + rect.w, rect.y, 'ne'], [rect.x, rect.y + rect.h, 'sw'], [rect.x + rect.w, rect.y + rect.h, 'se']];
-    const corner = corners.find(([x, y]) => Math.hypot(px - x, py - y) <= 12);
-    topDownZoneDrag = { zone: hit, mode: corner ? 'resize' : 'move', corner: corner?.[2], start: point, original: { ...hit.rect } };
-    drawTopDownPreview();
-    event.preventDefault();
-    return;
-  }
-  if (!authoringDrawing) return;
-  topDownDrawStart = point;
-  topDownDrawPreview = { x: point.x, y: point.y, w: 0, h: 0 };
-  drawTopDownPreview();
-  event.preventDefault();
-}
-
-function onTopDownMouseMove(event) {
-  if (topDownZoneDrag) {
-    updateAuthoringZoneDrag(topDownPoint(event));
-    return;
-  }
-  if (!topDownDrawStart) return;
-  const point = topDownPoint(event);
-  topDownDrawPreview = {
-    x: Math.min(topDownDrawStart.x, point.x), y: Math.min(topDownDrawStart.y, point.y),
-    w: Math.abs(point.x - topDownDrawStart.x), h: Math.abs(point.y - topDownDrawStart.y),
-  };
-  drawTopDownPreview();
-}
-
-function updateAuthoringZoneDrag(point) {
-  const zone = topDownZoneDrag.zone;
-  const original = topDownZoneDrag.original;
-  if (topDownZoneDrag.mode === 'move') {
-    zone.rect.x = Math.max(0, Math.min(printer.w - original.w, original.x + point.x - topDownZoneDrag.start.x));
-    zone.rect.y = Math.max(0, Math.min(printer.h - original.h, original.y + point.y - topDownZoneDrag.start.y));
-  } else {
-    const right = original.x + original.w;
-    const bottom = original.y + original.h;
-    const left = topDownZoneDrag.corner.includes('w') ? Math.min(point.x, right - 1) : original.x;
-    const top = topDownZoneDrag.corner.includes('n') ? Math.min(point.y, bottom - 1) : original.y;
-    const nextRight = topDownZoneDrag.corner.includes('e') ? Math.max(point.x, left + 1) : right;
-    const nextBottom = topDownZoneDrag.corner.includes('s') ? Math.max(point.y, top + 1) : bottom;
-    zone.rect.x = Math.max(0, left); zone.rect.y = Math.max(0, top);
-    zone.rect.w = Math.min(printer.w - zone.rect.x, nextRight - zone.rect.x);
-    zone.rect.h = Math.min(printer.h - zone.rect.y, nextBottom - zone.rect.y);
-  }
-  renderAuthoringZones();
-  drawTopDownPreview();
-  draw();
-}
-
-function onTopDownMouseUp() {
-  if (topDownZoneDrag) {
-    topDownZoneDrag = null;
-    renderAuthoringZones();
-    drawTopDownPreview();
-    if (currentView === '3d') refresh3DScene();
-    return;
-  }
-  if (!topDownDrawStart) return;
-  if (topDownDrawPreview.w >= 1 && topDownDrawPreview.h >= 1) addAuthoringZone({ ...topDownDrawPreview });
-  topDownDrawStart = null;
-  topDownDrawPreview = null;
-  drawTopDownPreview();
 }
 
 function onMouseDown(e) {
   if (currentView !== '2d') return;
   const rect = cvs.getBoundingClientRect();
   const mx = e.clientX-rect.left, my = e.clientY-rect.top;
-  if (AUTHORING_MODE && authoringDrawing && e.button === 0) {
-    const point = toCanvas(mx, my);
-    authoringDrag = { x: point.x, y: point.y };
-    authoringPreview = { x: point.x, y: point.y, w: 0, h: 0 };
-    e.preventDefault();
-    return;
-  }
-  if (AUTHORING_MODE && e.button === 0) {
-    const point = toCanvas(mx, my);
-    const zone = [...(printer.exclusionZones || [])].reverse().find(item => {
-      const r = item.rect;
-      return r && point.x >= r.x && point.x <= r.x + r.w && point.y >= r.y && point.y <= r.y + r.h;
-    });
-    if (zone) {
-      selectAuthoringZone(zone.id);
-      const r = zone.rect;
-      const corner = [[r.x, r.y, 'nw'], [r.x + r.w, r.y, 'ne'], [r.x, r.y + r.h, 'sw'], [r.x + r.w, r.y + r.h, 'se']]
-        .find(([x, y]) => Math.hypot(point.x - x, point.y - y) <= 12 / scale);
-      if (point.x >= r.x + r.w - 14 / scale && point.x <= r.x + r.w + 8 / scale && point.y >= r.y - 14 / scale && point.y <= r.y + 10 / scale) {
-        deleteAuthoringZone(zone.id);
-      } else {
-        topDownZoneDrag = { zone, mode: corner ? 'resize' : 'move', corner: corner?.[2], start: point, original: { ...r } };
-      }
-      draw();
-      e.preventDefault();
-      return;
-    }
-  }
   if (e.button === 1 || (e.button === 0 && e.altKey)) {
     panning = true; panStart = { x: e.clientX-panX, y: e.clientY-panY };
     cvs.style.cursor = 'grabbing'; e.preventDefault(); return;
@@ -1783,19 +878,6 @@ function onMouseMove(e) {
   if (currentView !== '2d') return;
   const rect = cvs.getBoundingClientRect();
   const mx = e.clientX-rect.left, my = e.clientY-rect.top;
-  if (topDownZoneDrag) {
-    updateAuthoringZoneDrag(toCanvas(mx, my));
-    return;
-  }
-  if (authoringDrag) {
-    const point = toCanvas(mx, my);
-    authoringPreview = {
-      x: Math.min(authoringDrag.x, point.x), y: Math.min(authoringDrag.y, point.y),
-      w: Math.abs(point.x - authoringDrag.x), h: Math.abs(point.y - authoringDrag.y),
-    };
-    draw();
-    return;
-  }
   if (panning) { panX = e.clientX-panStart.x; panY = e.clientY-panStart.y; draw(); return; }
   if (dragging) {
     const p = toCanvas(mx, my);
@@ -1807,22 +889,7 @@ function onMouseMove(e) {
   cvs.style.cursor = hit ? (hit._locked ? 'not-allowed' : 'move') : 'default';
 }
 
-function onMouseUp(e) {
-  if (topDownZoneDrag) {
-    topDownZoneDrag = null;
-    renderAuthoringZones();
-    drawTopDownPreview();
-    if (currentView === '3d') refresh3DScene();
-    draw();
-    return;
-  }
-  if (authoringDrag) {
-    if (authoringPreview.w >= 1 && authoringPreview.h >= 1) addAuthoringZone({ ...authoringPreview });
-    authoringDrag = null;
-    authoringPreview = null;
-    draw();
-    return;
-  }
+function onMouseUp() {
   if (dragging) {
     clampToFrame(dragging.comp);
     draw();
@@ -1867,18 +934,15 @@ function init3D() {
 
   camera3d = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 5000);
   camera3d.position.set(0, 400, 500);
-  topDownCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 5000);
-  topDownCamera.up.set(0, 0, -1);
 
   renderer3d = new THREE.WebGLRenderer({ antialias: true });
   renderer3d.setSize(container.clientWidth, container.clientHeight);
   renderer3d.setPixelRatio(window.devicePixelRatio);
   container.appendChild(renderer3d.domElement);
 
-  controls3d = new THREE.OrbitControls(camera3d, renderer3d.domElement);
+  controls3d = new OrbitControls(camera3d, renderer3d.domElement);
   controls3d.enableDamping = true;
   controls3d.dampingFactor = 0.1;
-  controls3d.enabled = !topDown3D;
 
   // Lights
   scene3d.add(new THREE.AmbientLight(0xffffff, 0.5));
@@ -1887,7 +951,6 @@ function init3D() {
   const dl2 = new THREE.DirectionalLight(0x6688cc, 0.3);
   dl2.position.set(-200, 200, -100); scene3d.add(dl2);
 
-  resize3D();
   animate3D();
 }
 
@@ -1896,29 +959,14 @@ function resize3D() {
   const container = document.getElementById('view-3d');
   camera3d.aspect = container.clientWidth / container.clientHeight;
   camera3d.updateProjectionMatrix();
-  const aspect = container.clientWidth / container.clientHeight;
-  const frameAspect = printer.w / printer.h;
-  if (aspect > frameAspect) {
-    topDownCamera.top = printer.h / 2;
-    topDownCamera.bottom = -printer.h / 2;
-    topDownCamera.left = -printer.h * aspect / 2;
-    topDownCamera.right = printer.h * aspect / 2;
-  } else {
-    topDownCamera.left = -printer.w / 2;
-    topDownCamera.right = printer.w / 2;
-    topDownCamera.top = printer.w / aspect / 2;
-    topDownCamera.bottom = -printer.w / aspect / 2;
-  }
-  topDownCamera.updateProjectionMatrix();
   renderer3d.setSize(container.clientWidth, container.clientHeight);
-  resizeTopDownDrawingSurface();
 }
 
 function animate3D() {
   requestAnimationFrame(animate3D);
   if (currentView !== '3d' || !renderer3d) return;
-  if (!topDown3D) controls3d.update();
-  renderer3d.render(scene3d, topDown3D ? topDownCamera : camera3d);
+  controls3d.update();
+  renderer3d.render(scene3d, camera3d);
 }
 
 // ============== HARDWARE 3D MODELS ==============
@@ -2339,22 +1387,15 @@ function build3DScene() {
       });
       // Center the group at the combined center
       frameGroup.position.set(-combCenter.x, -combCenter.y, -combCenter.z);
-      // First orient the native STL so its thinnest axis is vertical.
-      const frameOrientation = new THREE.Group();
-      frameOrientation.add(frameGroup);
-      // Rotate so the thinnest native axis becomes Y (up).
-      const dims = [{a:'x',v:combSize.x},{a:'y',v:combSize.y},{a:'z',v:combSize.z}].sort((a,b)=>a.v-b.v);
-      if (dims[0].a === 'z') frameOrientation.rotation.x = -Math.PI/2;
-      else if (dims[0].a === 'x') frameOrientation.rotation.z = -Math.PI/2;
-      else if (dims[0].a === 'y') { /* already correct */ }
-
-      // Native STL front/right orientation is not standardized. Apply explicit
-      // per-printer yaw after flattening so the 3D footprint matches logical W/H.
+      // Wrap in outer group to rotate around world origin after centering
       const frameWrapper = new THREE.Group();
-      frameWrapper.add(frameOrientation);
-      frameWrapper.rotation.y = (printer.frameYaw || 0) * Math.PI / 180;
+      frameWrapper.add(frameGroup);
+      // Rotate so thinnest native axis → Y (up): native is ~470x470x68
+      const dims = [{a:'x',v:combSize.x},{a:'y',v:combSize.y},{a:'z',v:combSize.z}].sort((a,b)=>a.v-b.v);
+      if (dims[0].a === 'z') frameWrapper.rotation.x = -Math.PI/2;
+      else if (dims[0].a === 'x') frameWrapper.rotation.z = -Math.PI/2;
+      else if (dims[0].a === 'y') { /* already correct */ }
       frameWrapper.userData.dynamic = true;
-      frameWrapper.userData.frameId = printer.id;
       scene3d.add(frameWrapper);
       // Compute frame surface Y: hex pattern is 4mm from bottom of frame STL
       frameWrapper.updateMatrixWorld(true);
@@ -2504,38 +1545,9 @@ function build3DScene() {
     scene3d.add(sprite);
   }
 
-  // Show the same exclusion zones as the 2D planner. The transparent raised
-  // overlays make the no-placement areas legible from the top-down camera.
-  const exclusionMat = new THREE.MeshPhongMaterial({
-    color: 0xff5c5c,
-    transparent: true,
-    opacity: 0.45,
-    depthWrite: false,
-  });
-  for (const zone of printer.exclusionZones || []) {
-    const rect = zone.rect;
-    if (!rect || rect.w <= 0 || rect.h <= 0) continue;
-    const zoneGeo = new THREE.BoxGeometry(rect.w, 1.5, rect.h);
-    const zoneMesh = new THREE.Mesh(zoneGeo, exclusionMat);
-    zoneMesh.position.set(
-      ox + rect.x + rect.w / 2,
-      frameTopY + 0.75,
-      oz + rect.y + rect.h / 2,
-    );
-    zoneMesh.userData.dynamic = true;
-    zoneMesh.userData.exclusionZoneId = zone.id;
-    scene3d.add(zoneMesh);
-  }
-
   // Point camera at center
   controls3d.target.set(0, 0, 0);
-  if (topDown3D) {
-    const distance = Math.max(pw, ph) * 1.35;
-    topDownCamera.position.set(0, distance, 0);
-    topDownCamera.lookAt(0, 0, 0);
-  } else {
-    camera3d.position.set(pw * 0.6, pw * 0.8, pw * 0.9);
-  }
+  camera3d.position.set(pw * 0.6, pw * 0.8, pw * 0.9);
   controls3d.update();
 }
 
@@ -2563,7 +1575,7 @@ function showChecklist() {
     counts[c.name] = (counts[c.name] || 0) + 1;
     if (c.stl) stls[c.name] = c.stl;
   }
-  const printerName = printer.name;
+  const printerName = PRINTERS.find(p => p.id === printer.id).name;
   const rows = Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))
     .map(([name, count]) => `
       <tr>
@@ -2618,14 +1630,9 @@ function exportChecklistCSV() {
 // ============== SAVE/LOAD/EXPORT ==============
 function saveLayout() {
   const data = {
-    version: 5, printer: printer.id,
-    ...(printer.id === 'custom' ? { customFrame: { width: printer.w, height: printer.h } } : {}),
+    version: 4, printer: printer.id,
 
     components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, catColor: c.catColor, stl: c.stl, orient: c.orient || 'flat', locked: c._locked || false })),
-    ...(printer.id === 'custom' ? {
-      customFrame: { width: printer.w, height: printer.h },
-      exclusionZones: customExclusionZones,
-    } : {}),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -2643,17 +1650,9 @@ function loadLayout() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.printer === 'custom' && data.customFrame) {
-          customExclusionZones = Array.isArray(data.exclusionZones) ? data.exclusionZones : [];
-          document.getElementById('custom-frame-width').value = data.customFrame.width;
-          document.getElementById('custom-frame-height').value = data.customFrame.height;
-          document.getElementById('printer').value = 'custom';
-          document.getElementById('custom-frame-width').value = data.customFrame.width;
-          document.getElementById('custom-frame-height').value = data.customFrame.height;
-          applyCustomFrame();
-        } else if (data.printer) {
+        if (data.printer) {
           const p = PRINTERS.find(pr => pr.id === data.printer);
-          if (p) { printer = p; document.getElementById('printer').value = p.id; updateFrameDimensions(); }
+          if (p) { printer = p; document.getElementById('printer').value = p.id; }
         }
 
         placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
@@ -2690,7 +1689,7 @@ function exportImage() {
   const ex = ec.getContext('2d');
   ex.fillStyle = themeColor('--bg'); ex.fillRect(0, 0, ew, eh);
   ex.fillStyle = themeColor('--highlight'); ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
-  ex.fillText(`FT EMS — ${printer.name}`, pad*es*0.4, 20*es);
+  ex.fillText(`FT EMS — ${PRINTERS.find(p=>p.id===printer.id).name}`, pad*es*0.4, 20*es);
   ex.save(); ex.translate(pad*es, (pad+10)*es); ex.scale(es, es);
   ex.fillStyle = themeColor('--canvas-bg'); ex.fillRect(0, 0, printer.w, printer.h);
   // Hex dots
@@ -2700,7 +1699,6 @@ function exportImage() {
       ex.beginPath(); ex.arc(x, y, 0.8, 0, Math.PI*2); ex.fill();
     }
   }
-  drawExclusionZones(ex, 0.75);
   ex.strokeStyle = themeColor('--canvas-border'); ex.lineWidth = 1.5; ex.strokeRect(0, 0, printer.w, printer.h);
   for (const c of placed) {
     const b = getBounds(c);
@@ -2725,7 +1723,7 @@ function showSuggestLayout() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
 
-  const printerName = printer.name;
+  const printerName = PRINTERS.find(p => p.id === printer.id)?.name || printer.id;
   let catHtml = '';
   CATEGORIES.forEach((cat, ci) => {
     let itemsHtml = '';
@@ -2842,7 +1840,7 @@ function runSuggestLayout(modal) {
 
   if (checkedComps.length === 0 && checkedDucts.length === 0) return;
 
-  console.log(`Running shared layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
+  console.log(`Running SA layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
 
   let placedComponents = [];
   
@@ -2854,34 +1852,11 @@ function runSuggestLayout(modal) {
     
     console.log(`Cable duct aware SA: reserving ${reservedMargin}mm edge margin (cable duct margin: ${CABLE_DUCT_MARGIN}mm + padding: ${COMP_PAD}mm, base: ${FRAME_MARGIN}mm)`);
     
-    const result = LayoutCore.placeComponents({
-      frame: printer,
-      margin: reservedMargin,
-      padding: COMP_PAD,
-      exclusionPadding: COMP_PAD,
-      gridStep: HEX_SPACING,
-      fixed: placed,
-      components: checkedComps.map((entry, index) => ({
-        ...entry.comp,
-        id: `suggest-${index}`,
-        x: 0, y: 0, rotation: 0,
-        catColor: entry.color,
-        stl: entry.comp.stl || '',
-        orient: entry.comp.orient || 'flat',
-      })),
-    });
-    placedComponents = result.placed.map(c => ({
-      ...c,
-      id: nextId++,
-      _locked: false,
-      _col: false,
-    }));
+    // Use reserved margin for component placement
+    const seededComponents = seedPlacement(checkedComps, reservedMargin);
+    placedComponents = deterministicGridPlacement(seededComponents, printer.w, printer.h, reservedMargin);
+    
     placed.push(...placedComponents);
-    if (result.unplaced.length) {
-      const names = result.unplaced.map(c => c.name).join(', ');
-      console.warn(`Could not place ${result.unplaced.length} component(s): ${names}`);
-      alert(`Could not place: ${names}. No invalid fallback placement was added.`);
-    }
   }
 
   // Phase 2: Place cable ducts around/between components
@@ -3724,10 +2699,6 @@ function placeCableDucts(ductList, existingComponents) {
   function isSpotFree(x, y, w, h) {
     const key = `${Math.round(x/5)},${Math.round(y/5)}`; // 5mm grid for fast lookup
     if (usedSpots.has(key)) return false;
-    const exclusionCandidate = { x: snap(x), y: snap(y), w, h, rotation: 0 };
-    if (!LayoutCore.validatePlacement(exclusionCandidate, [], printer, { exclusionPadding: COMP_PAD })) {
-      return false;
-    }
     
     // Check against existing components (use getBounds for position, but check against visual bounds)
     for (const comp of existingComponents) {
@@ -3983,36 +2954,42 @@ function placeCableDucts(ductList, existingComponents) {
   return result;
 }
 
-// Auto-place existing placed components using the same deterministic engine as Suggest Layout.
+// Auto-place existing placed components (re-arrange using SA)
 function autoPlaceExisting() {
   if (placed.length === 0) { alert('No components to arrange. Use "Suggest Layout" to add components first.'); return; }
-  const unlocked = placed.filter(c => !c._locked && !c.name.toLowerCase().includes('cable duct'));
+  const unlocked = placed.filter(c => !c._locked);
   if (unlocked.length === 0) { alert('All components are locked. Unlock some (L key) to auto-place.'); return; }
 
-  console.log(`Auto-placing ${unlocked.length} unlocked components using shared layout...`);
+  console.log(`Auto-placing ${unlocked.length} unlocked components using SA...`);
+
+  // Build component list from unlocked placements
+  const components = unlocked.map(c => ({
+    comp: { name: c.name, w: c.w, h: c.h, stl: c.stl, orient: c.orient },
+    color: c.catColor,
+    catId: getCatIdForComp(c.name),
+  }));
 
   // Calculate margin before filtering placed (need full component set for duct detection)
   const hasLDucts = placed.some(c => c.name.toLowerCase().includes('cable duct l'));
   const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN;
 
-  const fixed = placed.filter(c => c._locked || c.name.toLowerCase().includes('cable duct'));
-  const result = LayoutCore.placeComponents({
-    frame: printer,
-    margin: reservedMargin,
-    padding: COMP_PAD,
-    exclusionPadding: COMP_PAD,
-    gridStep: HEX_SPACING,
-    fixed,
-    components: unlocked,
-  });
-  if (result.unplaced.length) {
-    const names = result.unplaced.map(c => c.name).join(', ');
-    console.warn(`Auto Place could not place ${result.unplaced.length} component(s): ${names}`);
-    alert(`Auto Place could not place: ${names}. The existing layout was not changed.`);
-    return;
-  }
-  placed = [...fixed, ...result.placed];
+  // Remove unlocked components from placed array
+  placed = placed.filter(c => c._locked);
   selected = null;
+
+  // Re-place using simulated annealing
+  const seededComponents = seedPlacement(components, reservedMargin);
+  
+  // Separate cable ducts (fixed) from regular components (optimizable) 
+  const cableDucts = placed.filter(c => c.name.toLowerCase().includes('cable duct'));
+  const nonDuctComponents = placed.filter(c => !c.name.toLowerCase().includes('cable duct'));
+  
+  // Merge with locked non-duct components for SA (SA will respect locked components as obstacles)
+  const allComponents = [...nonDuctComponents, ...seededComponents];
+  const optimizedComponents = annealLayout(allComponents, 3000);
+  
+  // Update placed array: keep cable ducts in original positions + optimized regular components
+  placed = [...cableDucts, ...optimizedComponents];
 
   updateBOM(); 
   draw();
@@ -4031,9 +3008,15 @@ function autoPlaceExisting() {
 
 
 // ============== GO ==============
+
+// Temporary compatibility bridge for the existing inline HTML handlers.
+Object.assign(window, {
+  setView, saveLayout, loadLayout, clearLayout, exportImage, showSuggestLayout,
+  autoPlaceExisting, setTheme, onPrinterChange, onSearch, duplicateSelected,
+  rotateComponent, toggleSelectedLock, removeSelected, showChecklist,
+  exportChecklistCSV, wizardFilter, runSuggestLayout,
+});
+Object.defineProperty(window, 'selected', { get: () => selected });
+
 console.log('🚀 FT EMS VISUALIZER LOADED - Build 2026-03-05-15:21 - NUCLEAR ANTI-CLUSTER v2.0 ACTIVE - GITHUB SYNC TEST');
 init(); centerView();
-</script>
-
-</body>
-</html>
