@@ -261,6 +261,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
         <label for="model-zone-w">Width<input id="model-zone-w" aria-label="Model exclusion width" type="number" min="0.01" step="any" value="50"></label>
         <label for="model-zone-h">Height<input id="model-zone-h" aria-label="Model exclusion height" type="number" min="0.01" step="any" value="20"></label>
       </div>
+      <button class="btn" id="model-draw-toggle" type="button" onclick="toggleModelDrawing()">Draw exclusion on canvas</button>
       <button class="btn" type="button" onclick="addModelExclusion()">Add exclusion</button>
       <button class="btn" type="button" onclick="exportModelDefinition()">Save model definition</button>
       <div id="model-zone-list"></div>

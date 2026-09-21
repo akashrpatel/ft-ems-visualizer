@@ -212,6 +212,9 @@ let currentView = '2d';
 const AUTHORING_MODE = new URLSearchParams(location.search).get('mode') === 'authoring';
 let customExclusionZones = [];
 let customPrinter = { id: 'custom', name: 'Custom — 400×400mm', w: 400, h: 400, exclusionZones: customExclusionZones };
+let modelDrawing = false;
+let modelDrawStart = null;
+const AUTHORED_MODELS_STORAGE_KEY = 'ft-ems-authored-models';
 
 const PREFERENCES_STORAGE_KEY = 'ft-ems-preferences';
 const VALID_THEMES = new Set(['classic', 'readable-dark', 'light']);
@@ -236,6 +239,19 @@ function writePreferences(patch) {
     const preferences = { ...readPreferences(), ...patch };
     localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
     if (preferences.theme) localStorage.setItem(THEME_STORAGE_KEY, preferences.theme);
+  } catch (_) {}
+}
+
+function restoreAuthoredModels() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUTHORED_MODELS_STORAGE_KEY) || '{}');
+    for (const model of PRINTERS) {
+      const authored = stored[model.id];
+      if (authored && Array.isArray(authored.exclusionZones)) {
+        model.exclusionZones = authored.exclusionZones;
+        model.definitionVersion = authored.version || model.definitionVersion || 1;
+      }
+    }
   } catch (_) {}
 }
 
@@ -402,6 +418,7 @@ function setTheme(theme) {
 // ============== INIT ==============
 function init() {
   const preferences = readPreferences();
+  restoreAuthoredModels();
   initTheme();
   const sel = document.getElementById('printer');
   PRINTERS.forEach(p => {
@@ -537,6 +554,7 @@ function applyCustomFrame() {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
   customPrinter = { id: 'custom', name: `Custom — ${formatMm(width)}×${formatMm(height)}mm`, w: width, h: height, exclusionZones: customExclusionZones };
   printer = customPrinter;
+  persistActiveModelDefinition();
   document.getElementById('printer').value = 'custom';
   writePreferences({ printerId: 'custom' });
   updateModelControls();
@@ -560,6 +578,7 @@ function addCustomExclusion() {
   customExclusionZones.push({ id, name, type: 'custom', rect });
   customPrinter.exclusionZones = customExclusionZones;
   if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+  persistActiveModelDefinition();
   renderCustomExclusions();
   draw();
 }
@@ -574,17 +593,25 @@ function addModelExclusion() {
     h: Number(document.getElementById('model-zone-h')?.value),
   };
   if (!Object.values(rect).every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) return;
+  addModelExclusionFromRect(rect, name);
+}
+
+function addModelExclusionFromRect(rect, providedName) {
+  if (!AUTHORING_MODE || printer.id === 'custom') return;
+  const name = providedName || document.getElementById('model-zone-name')?.value.trim() || 'Custom exclusion';
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exclusion';
   let id = base;
   let suffix = 2;
   while ((printer.exclusionZones || []).some(zone => zone.id === id)) id = `${base}-${suffix++}`;
   printer.exclusionZones = [...(printer.exclusionZones || []), { id, name, type: 'custom', rect }];
+  persistActiveModelDefinition();
   renderModelZones();
   draw();
 }
 
 function deleteModelExclusion(id) {
   printer.exclusionZones = (printer.exclusionZones || []).filter(zone => zone.id !== id);
+  persistActiveModelDefinition();
   renderModelZones();
   draw();
   if (currentView === '3d') refresh3DScene();
@@ -649,6 +676,30 @@ function exportModelDefinition() {
   link.download = `ft-ems-model-${printer.id}.json`;
   link.click();
   URL.revokeObjectURL(link.href);
+}
+
+function persistActiveModelDefinition() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUTHORED_MODELS_STORAGE_KEY) || '{}');
+    stored[printer.id] = {
+      schemaVersion: 1,
+      id: printer.id,
+      name: printer.name,
+      version: printer.definitionVersion || 1,
+      frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+      exclusionZones: printer.exclusionZones || [],
+    };
+    localStorage.setItem(AUTHORED_MODELS_STORAGE_KEY, JSON.stringify(stored));
+  } catch (_) {}
+}
+
+function toggleModelDrawing() {
+  if (!AUTHORING_MODE) return;
+  modelDrawing = !modelDrawing;
+  modelDrawStart = null;
+  const button = document.getElementById('model-draw-toggle');
+  if (button) button.textContent = modelDrawing ? 'Click second corner (cancel with Esc)' : 'Draw exclusion on canvas';
+  cvs.style.cursor = modelDrawing ? 'crosshair' : 'default';
 }
 
 function centerView() {
@@ -1038,6 +1089,31 @@ function onMouseDown(e) {
     cvs.style.cursor = 'grabbing'; e.preventDefault(); return;
   }
   if (e.button === 0) {
+    if (AUTHORING_MODE && modelDrawing) {
+      const point = toCanvas(mx, my);
+      if (!modelDrawStart) {
+        modelDrawStart = point;
+      } else {
+        const rect = {
+          x: Math.min(modelDrawStart.x, point.x),
+          y: Math.min(modelDrawStart.y, point.y),
+          w: Math.abs(point.x - modelDrawStart.x),
+          h: Math.abs(point.y - modelDrawStart.y),
+        };
+        if (rect.w > 0.1 && rect.h > 0.1) {
+          const input = document.getElementById('model-zone-name');
+          if (input && !input.value.trim()) input.value = 'Drawn exclusion';
+          addModelExclusionFromRect(rect);
+        }
+        modelDrawStart = null;
+        modelDrawing = false;
+        const button = document.getElementById('model-draw-toggle');
+        if (button) button.textContent = 'Draw exclusion on canvas';
+        cvs.style.cursor = 'default';
+      }
+      draw();
+      return;
+    }
     const hit = hitTest(mx, my);
     if (hit) {
       selected = hit;
@@ -1093,7 +1169,7 @@ function onKey(e) {
   else if (e.key === 'r' || e.key === 'R') {
     rotateComponent(selected);
   }
-  else if (e.key === 'Escape') { selected = null; draw(); }
+  else if (e.key === 'Escape') { selected = null; modelDrawing = false; modelDrawStart = null; cvs.style.cursor = 'default'; draw(); }
   else if (e.key === 'l' || e.key === 'L') {
     toggleSelectedLock();
   }
@@ -1807,7 +1883,15 @@ function exportChecklistCSV() {
 // ============== SAVE/LOAD/EXPORT ==============
 function saveLayout() {
   const data = {
-    version: 4, printer: printer.id,
+    version: 5,
+    printer: printer.id,
+    printerDefinition: {
+      id: printer.id,
+      name: printer.name,
+      version: printer.definitionVersion || 1,
+      frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+      exclusionZones: printer.exclusionZones || [],
+    },
 
     components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, catColor: c.catColor, stl: c.stl, orient: c.orient || 'flat', locked: c._locked || false })),
   };
@@ -1827,13 +1911,23 @@ function loadLayout() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.printer) {
+        if (data.printer === 'custom' && data.printerDefinition?.frame) {
+          const frame = data.printerDefinition.frame;
+          customExclusionZones = data.printerDefinition.exclusionZones || [];
+          customPrinter = { id: 'custom', name: data.printerDefinition.name || `Custom — ${frame.w}×${frame.h}mm`, w: Number(frame.w), h: Number(frame.h), exclusionZones: customExclusionZones };
+          printer = customPrinter;
+          document.getElementById('printer').value = 'custom';
+        } else if (data.printer) {
           const p = PRINTERS.find(pr => pr.id === data.printer);
-          if (p) { printer = p; document.getElementById('printer').value = p.id; }
+          if (p) {
+            printer = p;
+            if (data.printerDefinition?.exclusionZones) printer.exclusionZones = data.printerDefinition.exclusionZones;
+            document.getElementById('printer').value = p.id;
+          }
         }
 
         placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
-        selected = null; updateBOM(); centerView(); draw();
+        selected = null; updateModelControls(); updateBOM(); centerView(); draw();
         if (currentView === '3d') refresh3DScene();
       } catch { alert('Invalid layout file'); }
     };
@@ -3206,6 +3300,7 @@ Object.assign(window, {
   autoPlaceExisting, setTheme, onPrinterChange, onSearch, duplicateSelected,
   rotateComponent, toggleSelectedLock, removeSelected, showChecklist,
   applyCustomFrame, addCustomExclusion, addModelExclusion, exportModelDefinition,
+  toggleModelDrawing,
   exportChecklistCSV, wizardFilter, runSuggestLayout,
 });
 Object.defineProperty(window, 'selected', { get: () => selected });
