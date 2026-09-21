@@ -10,6 +10,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
 // ============== DATA ==============
+const LOCAL_DEVELOPMENT_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const LOCAL_DEVELOPMENT = LOCAL_DEVELOPMENT_HOSTS.has(location.hostname);
+const MODEL_EXCLUSIONS_ENABLED = LOCAL_DEVELOPMENT;
+
 const PRINTERS = [
   { id: 'v0-120',       name: 'Voron V0 — 120mm',       w: 226, h: 124, frameStls: [
     { stl: 'ems-files/FT-EMS Frame-v0.stl' },
@@ -71,11 +75,13 @@ const PRINTERS = [
   ]},
 ];
 
-for (const definition of BUILT_IN_MODEL_DEFINITIONS) {
-  const model = PRINTERS.find(item => item.id === definition.id);
-  if (model) {
-    model.exclusionZones = definition.exclusionZones;
-    model.definitionVersion = definition.version;
+if (MODEL_EXCLUSIONS_ENABLED) {
+  for (const definition of BUILT_IN_MODEL_DEFINITIONS) {
+    const model = PRINTERS.find(item => item.id === definition.id);
+    if (model) {
+      model.exclusionZones = definition.exclusionZones;
+      model.definitionVersion = definition.version;
+    }
   }
 }
 
@@ -210,7 +216,7 @@ let placed = [];
 let selected = null;
 let nextId = 1;
 let currentView = '2d';
-const AUTHORING_MODE = new URLSearchParams(location.search).get('mode') === 'authoring';
+const AUTHORING_MODE = LOCAL_DEVELOPMENT && new URLSearchParams(location.search).get('mode') === 'authoring';
 let customExclusionZones = [];
 let customPrinter = { id: 'custom', name: 'Custom — 400×400mm', w: 400, h: 400, exclusionZones: customExclusionZones };
 let modelDrawing = false;
@@ -246,6 +252,7 @@ function writePreferences(patch) {
 }
 
 function restoreAuthoredModels() {
+  if (!MODEL_EXCLUSIONS_ENABLED) return;
   try {
     const stored = JSON.parse(localStorage.getItem(AUTHORED_MODELS_STORAGE_KEY) || '{}');
     for (const model of PRINTERS) {
@@ -961,11 +968,41 @@ function checkCollisions() {
 function drawHex(cx, cy, r) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 3 * i - Math.PI / 6;
+    const a = Math.PI / 3 * i;
     const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+function drawHoneycombGrid() {
+  const radius = 9;
+  const columnStep = radius * 1.5;
+  const rowStep = radius * Math.sqrt(3);
+  const startX = -radius;
+  const startY = -radius;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
+  ctx.clip();
+  ctx.fillStyle = themeColor('--canvas-bg');
+  ctx.fillRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
+  ctx.lineWidth = 3.6 / scale;
+  ctx.strokeStyle = themeColor('--canvas-frame');
+  ctx.fillStyle = themeColor('--canvas-cell');
+
+  let column = 0;
+  for (let x = startX; x <= printer.w + radius; x += columnStep) {
+    const yOffset = (column % 2) * rowStep / 2;
+    for (let y = startY + yOffset; y <= printer.h + radius; y += rowStep) {
+      drawHex(x, y, radius);
+      ctx.fill();
+      ctx.stroke();
+    }
+    column++;
+  }
+  ctx.restore();
 }
 
 function updateObjectToolbar() {
@@ -1015,26 +1052,10 @@ function draw() {
   ctx.translate(panX, panY);
   ctx.scale(scale, scale);
 
-  // Frame bg
-  ctx.fillStyle = themeColor('--canvas-bg');
+  // Solid printed frame and inset honeycomb field.
+  ctx.fillStyle = themeColor('--canvas-frame');
   ctx.fillRect(0, 0, printer.w, printer.h);
-
-  // Hex grid — matches FT EMS standoff pattern (22mm center-to-center)
-  let col = 0;
-  for (let x = HEX_OFFSET_X; x <= printer.w - HEX_OFFSET_X; x += HEX_SPACING) {
-    const yOff = (col % 2 === 0) ? HEX_OFFSET_Y : HEX_OFFSET_Y + HEX_ROW / 2;
-    for (let y = yOff; y <= printer.h - HEX_OFFSET_Y; y += HEX_ROW) {
-      // Map from panel-bottom-origin to canvas-top-origin
-      const cy = printer.h - y;
-      ctx.strokeStyle = themeColor('--canvas-grid');
-      ctx.lineWidth = 0.3 / scale;
-      drawHex(x, cy, HEX_R);
-      ctx.stroke();
-      ctx.fillStyle = themeColor('--canvas-dot');
-      ctx.beginPath(); ctx.arc(x, cy, 1.0, 0, Math.PI * 2); ctx.fill();
-    }
-    col++;
-  }
+  drawHoneycombGrid();
 
   // Frame border
   ctx.strokeStyle = themeColor('--canvas-border'); ctx.lineWidth = 2 / scale;
@@ -2004,7 +2025,7 @@ function loadLayout() {
           const p = PRINTERS.find(pr => pr.id === data.printer);
           if (p) {
             printer = p;
-            if (data.printerDefinition?.exclusionZones) printer.exclusionZones = data.printerDefinition.exclusionZones;
+            if (MODEL_EXCLUSIONS_ENABLED && data.printerDefinition?.exclusionZones) printer.exclusionZones = data.printerDefinition.exclusionZones;
             document.getElementById('printer').value = p.id;
           }
         }
