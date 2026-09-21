@@ -12,16 +12,16 @@ echo "============================================"
 echo "  FT EMS Layout Planner - Local Server"
 echo "============================================"
 echo ""
-echo "Starting web server on http://localhost:8080"
+echo "Starting Vite dev server on http://localhost:8080"
 echo "Press Ctrl+C to stop"
 echo ""
-python3 -m http.server 8080 --bind 127.0.0.1 &
-server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null' EXIT INT TERM
-sleep 1
+if [ ! -d node_modules ]; then
+  echo "Installing dependencies..."
+  npm install || exit 1
+fi
 if [ "${FT_EMS_NO_BROWSER:-0}" != "1" ]; then
   if command -v xdg-open &>/dev/null; then xdg-open http://localhost:8080
   elif command -v open &>/dev/null; then open http://localhost:8080
   fi
 fi
-wait "$server_pid"
+npm run dev

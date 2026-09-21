@@ -30,12 +30,22 @@ A web-based graphical layout planner for the [FizzysTech Electronics Management 
 
 ## Quick Start
 
-### Option 1: Local
+### Option 1: Local development
 ```bash
 # First-time setup for a Git clone
 git lfs install
 git lfs pull
+npm install
 
+# Start the Vite development server
+npm run dev
+```
+
+Then use `http://localhost:8080`.
+
+The helper scripts are also available:
+
+```bash
 # Linux/Mac
 ./start.sh
 
@@ -43,15 +53,22 @@ git lfs pull
 start-windows.bat
 ```
 
-Then use `http://localhost:8080`. Do not open `index.html` directly: browsers block `file://` pages from loading the neighboring STL model files.
+Do not use `file://` for normal development: browsers block module and STL loading from local files. The app displays guidance if `index.html` is opened directly.
 
-### Option 2: Any Web Server
-Just serve the folder — it's a single `index.html` + STL files. No build step needed.
+### Option 2: Production build
+```bash
+npm run build
+```
 
-### Option 3: GitHub Pages
-This repo is configured for GitHub Pages. Enable it in Settings → Pages → Deploy from branch `main`.
+Vite writes the deployable static site to `dist/`. Preview it locally with `npm run preview`.
 
-### Option 4: Netlify Hosted
+### Option 3: Any Static Web Server
+Deploy the contents of `dist/` together with the STL assets. No application server or database is required.
+
+### Option 4: GitHub Pages
+The repository includes a Pages deployment workflow. In Settings → Pages, select **GitHub Actions** as the source. Each push to `main` builds and publishes `dist/`.
+
+### Option 5: Netlify Hosted
 Dev: https://stunning-genie-d26053.netlify.app/
 "Prod": https://ft-ems-planner.netlify.app/
 
