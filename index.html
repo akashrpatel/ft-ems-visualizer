@@ -133,6 +133,8 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #view-3d-status { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; padding: 24px; background: var(--bg); color: var(--text); font-size: var(--font-base); text-align: center; }
 #view-3d-status.visible { display: flex; }
 #view-3d-status.error { inset: auto 16px 16px; display: block; border: 1px solid var(--danger); border-radius: 6px; background: var(--panel); color: var(--danger); pointer-events: none; }
+#topdown-draw-layer { position: absolute; inset: 0; z-index: 3; display: none; cursor: crosshair; }
+#topdown-draw-layer.visible { display: block; }
 .object-toolbar { position: absolute; z-index: 5; display: flex; gap: 3px; padding: 4px; border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.35); transform: translate(-50%, -100%); }
 .object-toolbar[hidden] { display: none; }
 .object-toolbar.below { transform: translate(-50%, 0); }
@@ -230,6 +232,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   <div class="topbar-spacer"></div>
   <button class="btn" id="btn-2d" onclick="setView('2d')">📐 2D Layout</button>
   <button class="btn" id="btn-3d" onclick="if (location.protocol === 'file:') { document.getElementById('view-3d').style.display = 'block'; const status = document.getElementById('view-3d-status'); status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.'; status.className = 'visible error'; } else { setView('3d'); }">🧊 3D View</button>
+  <button class="btn authoring-only" id="btn-topdown" hidden onclick="setTopDownView()">🔭 Top-down 3D</button>
   <div class="topbar-sep"></div>
   <button class="btn" onclick="saveLayout()">💾 Save</button>
   <button class="btn" onclick="loadLayout()">📂 Load</button>
@@ -252,7 +255,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       <label for="printer">Printer Model</label>
       <select id="printer" onchange="onPrinterChange()"></select>
     </div>
-    <fieldset id="model-controls" hidden>
+    <fieldset id="authoring-controls" hidden>
       <legend>Model exclusions</legend>
       <label for="model-zone-name">Zone name<input id="model-zone-name" aria-label="Zone name" placeholder="Raised rail"></label>
       <div class="control-grid">
@@ -263,8 +266,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       </div>
       <button class="btn" id="model-draw-toggle" type="button" onclick="toggleModelDrawing()">Draw exclusion on canvas</button>
       <button class="btn" type="button" onclick="addModelExclusion()">Add exclusion</button>
+      <button class="btn" id="authoring-rename" type="button" onclick="renameSelectedAuthoringZone()" disabled>Rename selected</button>
       <button class="btn" type="button" onclick="exportModelDefinition()">Save model definition</button>
-      <div id="model-zone-list"></div>
+      <div id="authoring-zone-list"></div>
     </fieldset>
     <fieldset id="custom-frame-controls" hidden>
       <legend>Custom frame</legend>
@@ -294,7 +298,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   </div>
   <div id="canvas-wrap">
     <canvas id="canvas"></canvas>
-    <div id="view-3d"><div id="view-3d-status" role="status" aria-live="polite"></div></div>
+    <div id="view-3d"><div id="view-3d-status" role="status" aria-live="polite"></div><canvas id="topdown-draw-layer" aria-label="Top-down exclusion drawing surface"></canvas></div>
     <div id="object-toolbar" class="object-toolbar" role="toolbar" aria-label="Selected component actions" hidden>
       <button class="object-action" type="button" title="Duplicate (D)" aria-label="Duplicate selected component" aria-keyshortcuts="D" onclick="duplicateSelected()">⧉</button>
       <button class="object-action" type="button" title="Rotate 90° (R)" aria-label="Rotate selected component 90 degrees" aria-keyshortcuts="R" onclick="rotateComponent(selected)">↻</button>

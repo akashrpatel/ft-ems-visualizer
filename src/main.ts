@@ -3,6 +3,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import * as LayoutUI from './ui/layout-ui';
+import * as LayoutCore from './layout/layout-core';
 import { placeComponents } from './layout/layout-core';
 import { BUILT_IN_MODEL_DEFINITIONS } from './domain/model-definitions';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -214,6 +215,8 @@ let customExclusionZones = [];
 let customPrinter = { id: 'custom', name: 'Custom — 400×400mm', w: 400, h: 400, exclusionZones: customExclusionZones };
 let modelDrawing = false;
 let modelDrawStart = null;
+let topDownSelectedZoneId = null;
+let topDown3D = false;
 const AUTHORED_MODELS_STORAGE_KEY = 'ft-ems-authored-models';
 
 const PREFERENCES_STORAGE_KEY = 'ft-ems-preferences';
@@ -441,6 +444,7 @@ function init() {
   window.addEventListener('resize', () => { resizeCanvas(); if (currentView === '3d') resize3D(); });
   setupCanvasEvents();
   updateModelControls();
+  document.getElementById('btn-topdown').hidden = !AUTHORING_MODE;
   setView(preferences.view || '2d');
 }
 
@@ -501,6 +505,7 @@ function onSearch() {
 // ============== VIEW SWITCHING ==============
 function setView(v) {
   currentView = v;
+  if (v !== '3d') topDown3D = false;
   writePreferences({ view: v });
   document.getElementById('btn-2d').classList.toggle('btn-active', v === '2d');
   document.getElementById('btn-3d').classList.toggle('btn-active', v === '3d');
@@ -515,7 +520,31 @@ function setView(v) {
     const status = document.getElementById('view-3d-status');
     status.textContent = '3D models cannot load from a file:// page. Run ./start.sh (or start-windows.bat), then open http://localhost:8080.';
     status.className = 'visible error';
-  } else { init3D(); refresh3DScene(); }
+  } else {
+    init3D();
+    const surface = document.getElementById('topdown-draw-layer');
+    if (surface) surface.classList.toggle('visible', topDown3D);
+    if (topDown3D) applyTopDownCamera();
+    else if (controls3d) controls3d.enabled = true;
+    refresh3DScene();
+  }
+}
+
+function setTopDownView() {
+  topDown3D = true;
+  setView('3d');
+  applyTopDownCamera();
+}
+
+function applyTopDownCamera() {
+  const surface = document.getElementById('topdown-draw-layer');
+  if (surface) surface.classList.add('visible');
+  if (!camera3d || !controls3d) return;
+  controls3d.enabled = false;
+  camera3d.position.set(0, Math.max(printer.w, printer.h) * 1.6, 0.01);
+  camera3d.lookAt(0, 0, 0);
+  controls3d.target.set(0, 0, 0);
+  controls3d.update();
 }
 
 // ============== PRINTER ==============
@@ -536,7 +565,7 @@ function formatMm(value) {
 function updateModelControls() {
   const selectedId = document.getElementById('printer')?.value;
   const custom = selectedId === 'custom';
-  const modelControls = document.getElementById('model-controls');
+  const modelControls = document.getElementById('authoring-controls');
   const frameControls = document.getElementById('custom-frame-controls');
   const exclusionControls = document.getElementById('custom-exclusion-controls');
   if (modelControls) modelControls.hidden = !AUTHORING_MODE;
@@ -618,11 +647,13 @@ function deleteModelExclusion(id) {
 }
 
 function renderModelZones() {
-  const list = document.getElementById('model-zone-list');
+  const list = document.getElementById('authoring-zone-list');
   if (!list) return;
   list.replaceChildren(...(printer.exclusionZones || []).map(zone => {
     const row = document.createElement('div');
     row.className = 'model-zone-row';
+    row.classList.toggle('selected', zone.id === topDownSelectedZoneId);
+    row.onclick = () => selectAuthoringZone(zone.id);
     const label = document.createElement('span');
     label.textContent = `${zone.name || zone.id} — ${formatMm(zone.rect?.w)} × ${formatMm(zone.rect?.h)} mm`;
     const remove = document.createElement('button');
@@ -630,10 +661,31 @@ function renderModelZones() {
     remove.type = 'button';
     remove.textContent = '×';
     remove.setAttribute('aria-label', `Delete ${zone.name || zone.id}`);
-    remove.onclick = () => deleteModelExclusion(zone.id);
+    remove.onclick = event => { event.stopPropagation(); deleteModelExclusion(zone.id); };
     row.append(label, remove);
     return row;
   }));
+}
+
+function selectAuthoringZone(id) {
+  topDownSelectedZoneId = id;
+  const zone = (printer.exclusionZones || []).find(item => item.id === id);
+  const input = document.getElementById('model-zone-name');
+  const rename = document.getElementById('authoring-rename');
+  if (zone && input) input.value = zone.name || zone.id;
+  if (rename) rename.disabled = !zone;
+  renderModelZones();
+  draw();
+}
+
+function renameSelectedAuthoringZone() {
+  const zone = (printer.exclusionZones || []).find(item => item.id === topDownSelectedZoneId);
+  const name = document.getElementById('model-zone-name')?.value.trim();
+  if (!zone || !name) return;
+  zone.name = name;
+  persistActiveModelDefinition();
+  renderModelZones();
+  draw();
 }
 
 function renderCustomExclusions() {
@@ -698,7 +750,7 @@ function toggleModelDrawing() {
   modelDrawing = !modelDrawing;
   modelDrawStart = null;
   const button = document.getElementById('model-draw-toggle');
-  if (button) button.textContent = modelDrawing ? 'Click second corner (cancel with Esc)' : 'Draw exclusion on canvas';
+  if (button) button.textContent = modelDrawing ? 'Click second corner (cancel with Esc)' : 'Draw exclusion';
   cvs.style.cursor = modelDrawing ? 'crosshair' : 'default';
 }
 
@@ -868,6 +920,16 @@ function hitTest(mx, my) {
   return null;
 }
 
+function hitExclusionZone(mx, my) {
+  const point = toCanvas(mx, my);
+  for (let i = (printer.exclusionZones || []).length - 1; i >= 0; i--) {
+    const zone = printer.exclusionZones[i];
+    const rect = zone.rect;
+    if (rect && point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h) return zone;
+  }
+  return null;
+}
+
 function checkCollisions() {
   for (const c of placed) c._col = false;
   for (let i = 0; i < placed.length; i++) {
@@ -880,7 +942,20 @@ function checkCollisions() {
         placed[i]._col = true; placed[j]._col = true;
       }
     }
+    c._issues = LayoutCore.getPlacementIssues(c, placed.filter(other => other !== c), printer, {
+      margin: FRAME_MARGIN,
+      padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
+    });
+    if (c._issues.some(issue => issue.type !== 'component-collision')) c._col = true;
   }
+  const info = document.getElementById('canvas-info');
+  const metadataIssue = LayoutCore.validateExclusionZones(printer.exclusionZones || [])[0];
+  const firstIssue = placed.flatMap(c => c._issues || [])[0];
+  if (metadataIssue) info.textContent = `Invalid exclusion metadata: ${metadataIssue.zoneId || 'zone'} (${metadataIssue.reason})`;
+  else if (firstIssue?.type === 'excluded-area') info.textContent = `Inside exclusion: ${firstIssue.zoneName || firstIssue.zoneId}`;
+  else if (firstIssue?.type === 'outside-frame') info.textContent = 'Outside frame bounds';
+  else if (currentView === '2d') info.textContent = 'Scroll: Zoom | Alt+Drag: Pan | R: Rotate | D: Duplicate | L: Lock | Del: Remove';
 }
 
 function drawHex(cx, cy, r) {
@@ -977,7 +1052,7 @@ function draw() {
     const rect = zone.rect;
     if (!rect) continue;
     ctx.fillStyle = 'rgba(233,69,96,0.18)';
-    ctx.strokeStyle = 'rgba(233,69,96,0.85)';
+    ctx.strokeStyle = zone.id === topDownSelectedZoneId ? '#ffffff' : 'rgba(233,69,96,0.85)';
     ctx.lineWidth = 1 / scale;
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
     ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
@@ -1113,6 +1188,14 @@ function onMouseDown(e) {
       }
       draw();
       return;
+    }
+    if (AUTHORING_MODE) {
+      const zone = hitExclusionZone(mx, my);
+      if (zone) {
+        selectAuthoringZone(zone.id);
+        draw();
+        return;
+      }
     }
     const hit = hitTest(mx, my);
     if (hit) {
@@ -1971,6 +2054,13 @@ function exportImage() {
     }
   }
   ex.strokeStyle = themeColor('--canvas-border'); ex.lineWidth = 1.5; ex.strokeRect(0, 0, printer.w, printer.h);
+  for (const zone of printer.exclusionZones || []) {
+    if (!zone.rect) continue;
+    ex.fillStyle = 'rgba(233,69,96,0.22)';
+    ex.strokeStyle = 'rgba(233,69,96,0.9)';
+    ex.fillRect(zone.rect.x, zone.rect.y, zone.rect.w, zone.rect.h);
+    ex.strokeRect(zone.rect.x, zone.rect.y, zone.rect.w, zone.rect.h);
+  }
   for (const c of placed) {
     const b = getBounds(c);
     ex.fillStyle = hexRgba(c.catColor, 0.3); ex.fillRect(b.x, b.y, b.w, b.h);
@@ -2988,6 +3078,14 @@ function placeCableDucts(ductList, existingComponents) {
   function isSpotFree(x, y, w, h) {
     const key = `${Math.round(x/5)},${Math.round(y/5)}`; // 5mm grid for fast lookup
     if (usedSpots.has(key)) return false;
+
+    const placementIssues = LayoutCore.getPlacementIssues(
+      { id: `duct-${key}`, x, y, w, h, rotation: 0 },
+      [...existingComponents, ...result],
+      { x: 0, y: 0, w: printer.w, h: printer.h, exclusionZones: printer.exclusionZones || [] },
+      { exclusionPadding: COMP_PAD },
+    );
+    if (placementIssues.some(issue => issue.type === 'excluded-area' || issue.type === 'outside-frame')) return false;
     
     // Check against existing components (use getBounds for position, but check against visual bounds)
     for (const comp of existingComponents) {
@@ -3300,7 +3398,8 @@ Object.assign(window, {
   autoPlaceExisting, setTheme, onPrinterChange, onSearch, duplicateSelected,
   rotateComponent, toggleSelectedLock, removeSelected, showChecklist,
   applyCustomFrame, addCustomExclusion, addModelExclusion, exportModelDefinition,
-  toggleModelDrawing,
+  toggleModelDrawing, setTopDownView, renameSelectedAuthoringZone,
+  LayoutCore, THREE,
   exportChecklistCSV, wizardFilter, runSuggestLayout,
 });
 Object.defineProperty(window, 'selected', { get: () => selected });

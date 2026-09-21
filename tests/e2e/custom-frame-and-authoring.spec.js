@@ -22,5 +22,5 @@ test('authoring mode exposes built-in model exclusions', async ({ page }) => {
   await page.goto('/?mode=authoring');
   await expect(page.locator('#model-controls')).toBeVisible();
   await page.getByLabel('Printer Model').selectOption('sw');
-  await expect(page.locator('#model-zone-list')).toContainText('Raised electronics rail');
+  await expect(page.locator('#authoring-zone-list')).toContainText('Raised electronics rail');
 });
