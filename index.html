@@ -32,6 +32,7 @@ try {
   --modal-backdrop: rgba(0,0,0,0.7); --active-text: #e0e0e0; --danger-text: #e0e0e0;
   --font-xs: 10px; --font-sm: 11px; --font-md: 12px; --font-base: 13px;
   --canvas-bg: #0d1117; --canvas-grid: rgba(255,255,255,0.05);
+  --canvas-cell: rgba(255,255,255,0.025); --canvas-frame: #243140;
   --canvas-dot: rgba(255,255,255,0.18); --canvas-border: #3a5a8a;
   --canvas-safe: rgba(58,90,138,0.3); --canvas-dimension: #4a6a9a;
   --canvas-padding: rgba(255,255,255,0.03); --canvas-padding-border: rgba(255,255,255,0.08);
@@ -53,6 +54,7 @@ try {
   --active-text: #07111f; --danger-text: #ffffff;
   --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
   --canvas-bg: #101827; --canvas-grid: rgba(255,255,255,0.09);
+  --canvas-cell: rgba(255,255,255,0.045); --canvas-frame: #304764;
   --canvas-dot: rgba(255,255,255,0.32); --canvas-border: #7da2d6;
   --canvas-safe: rgba(125,162,214,0.55); --canvas-dimension: #cbd5e1;
   --canvas-padding: rgba(255,255,255,0.055); --canvas-padding-border: rgba(255,255,255,0.16);
@@ -70,6 +72,7 @@ try {
   --modal-backdrop: rgba(15,23,42,0.55); --active-text: #ffffff; --danger-text: #ffffff;
   --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
   --canvas-bg: #f8fafc; --canvas-grid: rgba(15,23,42,0.09);
+  --canvas-cell: rgba(15,23,42,0.025); --canvas-frame: #d6dee8;
   --canvas-dot: rgba(15,23,42,0.28); --canvas-border: #64748b;
   --canvas-safe: rgba(71,85,105,0.45); --canvas-dimension: #334155;
   --canvas-padding: rgba(15,23,42,0.035); --canvas-padding-border: rgba(15,23,42,0.14);
@@ -107,6 +110,14 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #printer-select { padding: 12px; border-bottom: 1px solid var(--accent); }
 #printer-select label { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
 #printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
+#custom-frame-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
+#custom-frame-controls[hidden] { display: none; }
+#custom-frame-controls legend { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+#custom-frame-controls .custom-frame-fields { display: flex; gap: 6px; margin: 6px 0; }
+#custom-frame-controls label { flex: 1; font-size: var(--font-sm); color: var(--text-dim); }
+#custom-frame-controls input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
+#custom-frame-controls button { width: 100%; }
+#frame-dimensions { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); }
 #search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
 #search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box input::placeholder { color: var(--text-dim); }
@@ -257,6 +268,19 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       <label for="printer">Printer Model</label>
       <select id="printer" onchange="onPrinterChange()"></select>
     </div>
+    <fieldset id="custom-frame-controls" hidden>
+      <legend>Custom frame</legend>
+      <div class="custom-frame-fields">
+        <label for="custom-frame-width">Width (mm)
+          <input id="custom-frame-width" aria-label="Custom frame width (mm)" type="number" min="1" step="1" value="400">
+        </label>
+        <label for="custom-frame-height">Height (mm)
+          <input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="1" value="400">
+        </label>
+      </div>
+      <button class="btn" type="button" onclick="applyCustomFrame()">Apply custom frame</button>
+      <div id="frame-dimensions" aria-label="Frame dimensions" aria-live="polite"></div>
+    </fieldset>
     <div id="search-box">
       <input type="text" id="search" placeholder="🔍 Search components..." oninput="onSearch()">
     </div>
@@ -671,9 +695,14 @@ function init() {
     opt.value = p.id; opt.textContent = p.name;
     sel.appendChild(opt);
   });
+  const customOption = document.createElement('option');
+  customOption.value = 'custom';
+  customOption.textContent = 'Custom frame';
+  sel.appendChild(customOption);
   const savedPrinter = PRINTERS.find(p => p.id === preferences.printerId);
   if (savedPrinter) printer = savedPrinter;
   sel.value = printer.id;
+  updateFrameDimensions();
   buildLibrary();
   const search = document.getElementById('search');
   search.value = preferences.search;
@@ -760,9 +789,53 @@ function setView(v) {
 
 // ============== PRINTER ==============
 function onPrinterChange() {
+  const selectedId = document.getElementById('printer').value;
+  if (selectedId === 'custom') {
+    updateCustomFrameVisibility();
+    return;
+  }
+  printer = PRINTERS.find(p => p.id === selectedId);
+  updateFrameDimensions();
   printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
   writePreferences({ printerId: printer.id });
   centerView(); draw();
+  if (currentView === '3d') refresh3DScene();
+}
+
+function updateFrameDimensions() {
+  updateCustomFrameVisibility();
+  document.getElementById('frame-dimensions').textContent =
+    `${printer.name.startsWith('Custom') ? 'Custom frame' : printer.name}: ${printer.w} × ${printer.h} mm`;
+}
+
+function updateCustomFrameVisibility() {
+  const controls = document.getElementById('custom-frame-controls');
+  const select = document.getElementById('printer');
+  controls.hidden = !select || select.value !== 'custom';
+}
+
+function applyCustomFrame() {
+  const width = Number(document.getElementById('custom-frame-width').value);
+  const height = Number(document.getElementById('custom-frame-height').value);
+  const status = document.getElementById('frame-dimensions');
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    status.textContent = 'Enter positive width and height values.';
+    return;
+  }
+
+  printer = { id: 'custom', name: `Custom — ${width}×${height}mm`, w: width, h: height };
+  const select = document.getElementById('printer');
+  let option = select.querySelector('option[value="custom"]');
+  if (!option) {
+    option = document.createElement('option');
+    option.value = 'custom';
+    select.appendChild(option);
+  }
+  option.textContent = printer.name;
+  select.value = 'custom';
+  updateFrameDimensions();
+  centerView();
+  draw();
   if (currentView === '3d') refresh3DScene();
 }
 
@@ -950,11 +1023,41 @@ function checkCollisions() {
 function drawHex(cx, cy, r) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 3 * i - Math.PI / 6;
+    const a = Math.PI / 3 * i;
     const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+function drawHoneycombGrid() {
+  const radius = 9;
+  const columnStep = radius * 1.5;
+  const rowStep = radius * Math.sqrt(3);
+  const startX = -radius;
+  const startY = -radius;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
+  ctx.clip();
+  ctx.fillStyle = themeColor('--canvas-bg');
+  ctx.fillRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
+  ctx.lineWidth = 3.6 / scale;
+  ctx.strokeStyle = themeColor('--canvas-frame');
+  ctx.fillStyle = themeColor('--canvas-cell');
+
+  let column = 0;
+  for (let x = startX; x <= printer.w + radius; x += columnStep) {
+    const yOffset = (column % 2) * rowStep / 2;
+    for (let y = startY + yOffset; y <= printer.h + radius; y += rowStep) {
+      drawHex(x, y, radius);
+      ctx.fill();
+      ctx.stroke();
+    }
+    column++;
+  }
+  ctx.restore();
 }
 
 function updateObjectToolbar() {
@@ -1004,26 +1107,10 @@ function draw() {
   ctx.translate(panX, panY);
   ctx.scale(scale, scale);
 
-  // Frame bg
-  ctx.fillStyle = themeColor('--canvas-bg');
+  // Solid printed frame and inset honeycomb field.
+  ctx.fillStyle = themeColor('--canvas-frame');
   ctx.fillRect(0, 0, printer.w, printer.h);
-
-  // Hex grid — matches FT EMS standoff pattern (22mm center-to-center)
-  let col = 0;
-  for (let x = HEX_OFFSET_X; x <= printer.w - HEX_OFFSET_X; x += HEX_SPACING) {
-    const yOff = (col % 2 === 0) ? HEX_OFFSET_Y : HEX_OFFSET_Y + HEX_ROW / 2;
-    for (let y = yOff; y <= printer.h - HEX_OFFSET_Y; y += HEX_ROW) {
-      // Map from panel-bottom-origin to canvas-top-origin
-      const cy = printer.h - y;
-      ctx.strokeStyle = themeColor('--canvas-grid');
-      ctx.lineWidth = 0.3 / scale;
-      drawHex(x, cy, HEX_R);
-      ctx.stroke();
-      ctx.fillStyle = themeColor('--canvas-dot');
-      ctx.beginPath(); ctx.arc(x, cy, 1.0, 0, Math.PI * 2); ctx.fill();
-    }
-    col++;
-  }
+  drawHoneycombGrid();
 
   // Frame border
   ctx.strokeStyle = themeColor('--canvas-border'); ctx.lineWidth = 2 / scale;
@@ -1850,7 +1937,7 @@ function showChecklist() {
     counts[c.name] = (counts[c.name] || 0) + 1;
     if (c.stl) stls[c.name] = c.stl;
   }
-  const printerName = PRINTERS.find(p => p.id === printer.id).name;
+  const printerName = printer.name;
   const rows = Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))
     .map(([name, count]) => `
       <tr>
@@ -1905,7 +1992,8 @@ function exportChecklistCSV() {
 // ============== SAVE/LOAD/EXPORT ==============
 function saveLayout() {
   const data = {
-    version: 4, printer: printer.id,
+    version: 5, printer: printer.id,
+    ...(printer.id === 'custom' ? { customFrame: { width: printer.w, height: printer.h } } : {}),
 
     components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, catColor: c.catColor, stl: c.stl, orient: c.orient || 'flat', locked: c._locked || false })),
   };
@@ -1925,9 +2013,13 @@ function loadLayout() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.printer) {
+        if (data.printer === 'custom' && data.customFrame) {
+          document.getElementById('custom-frame-width').value = data.customFrame.width;
+          document.getElementById('custom-frame-height').value = data.customFrame.height;
+          applyCustomFrame();
+        } else if (data.printer) {
           const p = PRINTERS.find(pr => pr.id === data.printer);
-          if (p) { printer = p; document.getElementById('printer').value = p.id; }
+          if (p) { printer = p; document.getElementById('printer').value = p.id; updateFrameDimensions(); }
         }
 
         placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
@@ -1964,7 +2056,7 @@ function exportImage() {
   const ex = ec.getContext('2d');
   ex.fillStyle = themeColor('--bg'); ex.fillRect(0, 0, ew, eh);
   ex.fillStyle = themeColor('--highlight'); ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
-  ex.fillText(`FT EMS — ${PRINTERS.find(p=>p.id===printer.id).name}`, pad*es*0.4, 20*es);
+  ex.fillText(`FT EMS — ${printer.name}`, pad*es*0.4, 20*es);
   ex.save(); ex.translate(pad*es, (pad+10)*es); ex.scale(es, es);
   ex.fillStyle = themeColor('--canvas-bg'); ex.fillRect(0, 0, printer.w, printer.h);
   // Hex dots
@@ -1998,7 +2090,7 @@ function showSuggestLayout() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
 
-  const printerName = PRINTERS.find(p => p.id === printer.id)?.name || printer.id;
+  const printerName = printer.name;
   let catHtml = '';
   CATEGORIES.forEach((cat, ci) => {
     let itemsHtml = '';
