@@ -95,6 +95,17 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #printer-select { padding: 12px; border-bottom: 1px solid var(--accent); }
 #printer-select label { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
 #printer-select select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
+#model-controls, #custom-frame-controls, #custom-exclusion-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
+#model-controls[hidden], #custom-frame-controls[hidden], #custom-exclusion-controls[hidden] { display: none; }
+#model-controls legend, #custom-frame-controls legend, #custom-exclusion-controls legend { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+#model-controls label, #custom-frame-controls label, #custom-exclusion-controls label { display: block; margin-top: 6px; font-size: var(--font-sm); color: var(--text-dim); }
+#model-controls input, #custom-frame-controls input, #custom-exclusion-controls input { width: 100%; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
+.control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#model-controls button, #custom-frame-controls button, #custom-exclusion-controls button { width: 100%; margin-top: 7px; }
+#frame-dimensions, #model-zone-list { margin-top: 7px; color: var(--text-dim); font-size: var(--font-sm); }
+.model-zone-row { display: flex; align-items: center; gap: 5px; padding: 4px 0; border-top: 1px solid var(--subtle-border); }
+.model-zone-row span { flex: 1; min-width: 0; }
+.model-zone-row button { width: auto !important; margin: 0 !important; padding: 2px 6px; }
 #search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
 #search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box input::placeholder { color: var(--text-dim); }
@@ -241,6 +252,40 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       <label for="printer">Printer Model</label>
       <select id="printer" onchange="onPrinterChange()"></select>
     </div>
+    <fieldset id="model-controls" hidden>
+      <legend>Model exclusions</legend>
+      <label for="model-zone-name">Zone name<input id="model-zone-name" aria-label="Zone name" placeholder="Raised rail"></label>
+      <div class="control-grid">
+        <label for="model-zone-x">X<input id="model-zone-x" aria-label="Model exclusion X" type="number" step="any" value="0"></label>
+        <label for="model-zone-y">Y<input id="model-zone-y" aria-label="Model exclusion Y" type="number" step="any" value="0"></label>
+        <label for="model-zone-w">Width<input id="model-zone-w" aria-label="Model exclusion width" type="number" min="0.01" step="any" value="50"></label>
+        <label for="model-zone-h">Height<input id="model-zone-h" aria-label="Model exclusion height" type="number" min="0.01" step="any" value="20"></label>
+      </div>
+      <button class="btn" type="button" onclick="addModelExclusion()">Add exclusion</button>
+      <button class="btn" type="button" onclick="exportModelDefinition()">Save model definition</button>
+      <div id="model-zone-list"></div>
+    </fieldset>
+    <fieldset id="custom-frame-controls" hidden>
+      <legend>Custom frame</legend>
+      <div class="control-grid">
+        <label for="custom-frame-width">Width (mm)<input id="custom-frame-width" aria-label="Custom frame width (mm)" type="number" min="1" step="any" value="400"></label>
+        <label for="custom-frame-height">Height (mm)<input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="any" value="400"></label>
+      </div>
+      <button class="btn" type="button" onclick="applyCustomFrame()">Apply custom frame</button>
+      <div id="frame-dimensions" aria-label="Frame dimensions" aria-live="polite"></div>
+    </fieldset>
+    <fieldset id="custom-exclusion-controls" hidden>
+      <legend>Custom exclusions</legend>
+      <label for="custom-exclusion-name">Name<input aria-label="Custom exclusion name" id="custom-exclusion-name" placeholder="Cable rail"></label>
+      <div class="control-grid">
+        <label for="custom-exclusion-x">X<input aria-label="Custom exclusion X" id="custom-exclusion-x" type="number" step="any" value="0"></label>
+        <label for="custom-exclusion-y">Y<input aria-label="Custom exclusion Y" id="custom-exclusion-y" type="number" step="any" value="0"></label>
+        <label for="custom-exclusion-width">Width<input aria-label="Custom exclusion width" id="custom-exclusion-width" type="number" min="0.01" step="any" value="50"></label>
+        <label for="custom-exclusion-height">Height<input aria-label="Custom exclusion height" id="custom-exclusion-height" type="number" min="0.01" step="any" value="20"></label>
+      </div>
+      <button class="btn" type="button" onclick="addCustomExclusion()">Add custom exclusion</button>
+      <div id="custom-exclusion-list"></div>
+    </fieldset>
     <div id="search-box">
       <input type="text" id="search" placeholder="🔍 Search components..." oninput="onSearch()">
     </div>

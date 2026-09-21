@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import * as LayoutUI from './ui/layout-ui';
 import { placeComponents } from './layout/layout-core';
+import { BUILT_IN_MODEL_DEFINITIONS } from './domain/model-definitions';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
@@ -68,6 +69,14 @@ const PRINTERS = [
     { stl: 'ems-files/FT_ems_swc_v2_frame.stl' },
   ]},
 ];
+
+for (const definition of BUILT_IN_MODEL_DEFINITIONS) {
+  const model = PRINTERS.find(item => item.id === definition.id);
+  if (model) {
+    model.exclusionZones = definition.exclusionZones;
+    model.definitionVersion = definition.version;
+  }
+}
 
 const CATEGORIES = [
   { id: 'mcu', name: 'MCU / Controller Boards', color: '#4e79a7', items: [
@@ -200,6 +209,9 @@ let placed = [];
 let selected = null;
 let nextId = 1;
 let currentView = '2d';
+const AUTHORING_MODE = new URLSearchParams(location.search).get('mode') === 'authoring';
+let customExclusionZones = [];
+let customPrinter = { id: 'custom', name: 'Custom — 400×400mm', w: 400, h: 400, exclusionZones: customExclusionZones };
 
 const PREFERENCES_STORAGE_KEY = 'ft-ems-preferences';
 const VALID_THEMES = new Set(['classic', 'readable-dark', 'light']);
@@ -397,6 +409,10 @@ function init() {
     opt.value = p.id; opt.textContent = p.name;
     sel.appendChild(opt);
   });
+  const customOption = document.createElement('option');
+  customOption.value = 'custom';
+  customOption.textContent = 'Custom frame';
+  sel.appendChild(customOption);
   const savedPrinter = PRINTERS.find(p => p.id === preferences.printerId);
   if (savedPrinter) printer = savedPrinter;
   sel.value = printer.id;
@@ -407,6 +423,7 @@ function init() {
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); if (currentView === '3d') resize3D(); });
   setupCanvasEvents();
+  updateModelControls();
   setView(preferences.view || '2d');
 }
 
@@ -486,10 +503,152 @@ function setView(v) {
 
 // ============== PRINTER ==============
 function onPrinterChange() {
-  printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
+  const selectedId = document.getElementById('printer').value;
+  printer = selectedId === 'custom' ? customPrinter : PRINTERS.find(p => p.id === selectedId);
   writePreferences({ printerId: printer.id });
+  updateModelControls();
   centerView(); draw();
   if (currentView === '3d') refresh3DScene();
+}
+
+function formatMm(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(Math.round(number * 10) / 10) : '';
+}
+
+function updateModelControls() {
+  const selectedId = document.getElementById('printer')?.value;
+  const custom = selectedId === 'custom';
+  const modelControls = document.getElementById('model-controls');
+  const frameControls = document.getElementById('custom-frame-controls');
+  const exclusionControls = document.getElementById('custom-exclusion-controls');
+  if (modelControls) modelControls.hidden = !AUTHORING_MODE;
+  if (frameControls) frameControls.hidden = !custom;
+  if (exclusionControls) exclusionControls.hidden = !custom;
+  const dimensions = document.getElementById('frame-dimensions');
+  if (dimensions) dimensions.textContent = `${printer.name}: ${formatMm(printer.w)} × ${formatMm(printer.h)} mm`;
+  renderModelZones();
+  renderCustomExclusions();
+}
+
+function applyCustomFrame() {
+  const width = Number(document.getElementById('custom-frame-width')?.value);
+  const height = Number(document.getElementById('custom-frame-height')?.value);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+  customPrinter = { id: 'custom', name: `Custom — ${formatMm(width)}×${formatMm(height)}mm`, w: width, h: height, exclusionZones: customExclusionZones };
+  printer = customPrinter;
+  document.getElementById('printer').value = 'custom';
+  writePreferences({ printerId: 'custom' });
+  updateModelControls();
+  centerView(); draw();
+  if (currentView === '3d') refresh3DScene();
+}
+
+function addCustomExclusion() {
+  const name = document.getElementById('custom-exclusion-name')?.value.trim() || 'Custom exclusion';
+  const rect = {
+    x: Number(document.getElementById('custom-exclusion-x')?.value),
+    y: Number(document.getElementById('custom-exclusion-y')?.value),
+    w: Number(document.getElementById('custom-exclusion-width')?.value),
+    h: Number(document.getElementById('custom-exclusion-height')?.value),
+  };
+  if (!Object.values(rect).every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) return;
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exclusion';
+  let id = base;
+  let suffix = 2;
+  while (customExclusionZones.some(zone => zone.id === id)) id = `${base}-${suffix++}`;
+  customExclusionZones.push({ id, name, type: 'custom', rect });
+  customPrinter.exclusionZones = customExclusionZones;
+  if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+  renderCustomExclusions();
+  draw();
+}
+
+function addModelExclusion() {
+  if (!AUTHORING_MODE || printer.id === 'custom') return;
+  const name = document.getElementById('model-zone-name')?.value.trim() || 'Custom exclusion';
+  const rect = {
+    x: Number(document.getElementById('model-zone-x')?.value),
+    y: Number(document.getElementById('model-zone-y')?.value),
+    w: Number(document.getElementById('model-zone-w')?.value),
+    h: Number(document.getElementById('model-zone-h')?.value),
+  };
+  if (!Object.values(rect).every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) return;
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exclusion';
+  let id = base;
+  let suffix = 2;
+  while ((printer.exclusionZones || []).some(zone => zone.id === id)) id = `${base}-${suffix++}`;
+  printer.exclusionZones = [...(printer.exclusionZones || []), { id, name, type: 'custom', rect }];
+  renderModelZones();
+  draw();
+}
+
+function deleteModelExclusion(id) {
+  printer.exclusionZones = (printer.exclusionZones || []).filter(zone => zone.id !== id);
+  renderModelZones();
+  draw();
+  if (currentView === '3d') refresh3DScene();
+}
+
+function renderModelZones() {
+  const list = document.getElementById('model-zone-list');
+  if (!list) return;
+  list.replaceChildren(...(printer.exclusionZones || []).map(zone => {
+    const row = document.createElement('div');
+    row.className = 'model-zone-row';
+    const label = document.createElement('span');
+    label.textContent = `${zone.name || zone.id} — ${formatMm(zone.rect?.w)} × ${formatMm(zone.rect?.h)} mm`;
+    const remove = document.createElement('button');
+    remove.className = 'btn';
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Delete ${zone.name || zone.id}`);
+    remove.onclick = () => deleteModelExclusion(zone.id);
+    row.append(label, remove);
+    return row;
+  }));
+}
+
+function renderCustomExclusions() {
+  const list = document.getElementById('custom-exclusion-list');
+  if (!list) return;
+  list.replaceChildren(...customExclusionZones.map(zone => {
+    const row = document.createElement('div');
+    row.className = 'model-zone-row';
+    const label = document.createElement('span');
+    label.textContent = `${zone.name} — ${formatMm(zone.rect.w)} × ${formatMm(zone.rect.h)} mm`;
+    const remove = document.createElement('button');
+    remove.className = 'btn';
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Delete ${zone.name}`);
+    remove.onclick = () => {
+      customExclusionZones = customExclusionZones.filter(item => item.id !== zone.id);
+      customPrinter.exclusionZones = customExclusionZones;
+      if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+      renderCustomExclusions();
+      draw();
+    };
+    row.append(label, remove);
+    return row;
+  }));
+}
+
+function exportModelDefinition() {
+  const definition = {
+    schemaVersion: 1,
+    id: printer.id,
+    name: printer.name,
+    version: printer.definitionVersion || 1,
+    frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+    exclusionZones: printer.exclusionZones || [],
+  };
+  const blob = new Blob([JSON.stringify(definition, null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `ft-ems-model-${printer.id}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function centerView() {
@@ -760,6 +919,23 @@ function draw() {
   ctx.setLineDash([6/scale, 4/scale]);
   ctx.strokeRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN*2, printer.h - FRAME_MARGIN*2);
   ctx.setLineDash([]);
+
+  // Printer/model exclusion zones. These are deliberately visible in 2D so
+  // placement constraints are understandable before an auto-placement run.
+  for (const zone of printer.exclusionZones || []) {
+    const rect = zone.rect;
+    if (!rect) continue;
+    ctx.fillStyle = 'rgba(233,69,96,0.18)';
+    ctx.strokeStyle = 'rgba(233,69,96,0.85)';
+    ctx.lineWidth = 1 / scale;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.fillStyle = 'rgba(255,220,225,0.9)';
+    ctx.font = `${Math.max(6, 9 / scale)}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(zone.name || zone.id, rect.x + 2, rect.y + 2);
+  }
 
   // Dimensions
   const dimensionFontPx = document.documentElement.dataset.theme === 'readable-dark' ? 13 : 10;
@@ -1854,7 +2030,7 @@ function runSuggestLayout(modal) {
     console.log(`Shared layout: reserving ${reservedMargin}mm edge margin (cable duct margin: ${CABLE_DUCT_MARGIN}mm + padding: ${COMP_PAD}mm, base: ${FRAME_MARGIN}mm)`);
 
     const result = placeComponents({
-      frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+      frame: { x: 0, y: 0, w: printer.w, h: printer.h, exclusionZones: printer.exclusionZones || [] },
       margin: reservedMargin,
       padding: COMP_PAD,
       exclusionPadding: COMP_PAD,
@@ -2987,7 +3163,7 @@ function autoPlaceExisting() {
 
   const fixed = placed.filter(c => c._locked || c.name.toLowerCase().includes('cable duct'));
   const result = placeComponents({
-    frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+    frame: { x: 0, y: 0, w: printer.w, h: printer.h, exclusionZones: printer.exclusionZones || [] },
     margin: reservedMargin,
     padding: COMP_PAD,
     exclusionPadding: COMP_PAD,
@@ -3029,6 +3205,7 @@ Object.assign(window, {
   setView, saveLayout, loadLayout, clearLayout, exportImage, showSuggestLayout,
   autoPlaceExisting, setTheme, onPrinterChange, onSearch, duplicateSelected,
   rotateComponent, toggleSelectedLock, removeSelected, showChecklist,
+  applyCustomFrame, addCustomExclusion, addModelExclusion, exportModelDefinition,
   exportChecklistCSV, wizardFilter, runSuggestLayout,
 });
 Object.defineProperty(window, 'selected', { get: () => selected });
