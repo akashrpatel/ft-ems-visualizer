@@ -1,5 +1,9 @@
 const { test, expect } = require('@playwright/test');
 
+test.beforeEach(async ({ page }) => {
+  await page.route(/\.stl$/i, route => route.abort());
+});
+
 async function chooseSuggestComponents(page) {
   const modal = page.locator('.wizard-modal');
   await page.getByRole('button', { name: /Suggest Layout/ }).click();
@@ -10,22 +14,58 @@ async function chooseSuggestComponents(page) {
   await modal.getByRole('button', { name: /Generate Layout/ }).click();
 }
 
+async function openPlanner(page) {
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => typeof window.LayoutCore)).toBe('object');
+}
+
 async function readLayout(page) {
   return page.evaluate(() => ({
-    printer: { id: printer.id, w: printer.w, h: printer.h },
+    printer: {
+      id: printer.id,
+      w: printer.w,
+      h: printer.h,
+      exclusionZoneIds: (printer.exclusionZones || []).map(zone => zone.id),
+    },
     components: placed.map(c => ({ id: c.id, name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, locked: Boolean(c._locked) })),
-    valid: LayoutCore.validateLayout(placed, printer, { margin: FRAME_MARGIN, padding: COMP_PAD }),
+    valid: LayoutCore.validateLayout(placed, printer, {
+      margin: FRAME_MARGIN,
+      padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
+    }),
   }));
 }
 
+async function downloadExportPixel(page, x, y) {
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export/ }).click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const pngBase64 = Buffer.concat(chunks).toString('base64');
+  return page.evaluate(async ({ encoded, sampleX, sampleY }) => {
+    const response = await fetch(`data:image/png;base64,${encoded}`);
+    const bitmap = await createImageBitmap(await response.blob());
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const exportContext = canvas.getContext('2d');
+    exportContext.drawImage(bitmap, 0, 0);
+    return Array.from(exportContext.getImageData(sampleX, sampleY, 1, 1).data);
+  }, { encoded: pngBase64, sampleX: x, sampleY: y });
+}
+
 test('Switchwire Suggest Layout and Auto Place share a valid deterministic placement', async ({ page }) => {
-  await page.goto('/');
+  await openPlanner(page);
   await page.selectOption('#printer', 'sw');
   await chooseSuggestComponents(page);
 
   const suggested = await readLayout(page);
   expect(suggested.components).toHaveLength(2);
   expect(suggested.valid).toBe(true);
+  expect(suggested.printer.exclusionZoneIds).toEqual(['switchwire-raised-rail']);
+  expect(suggested.components.every(component => component.y >= 55)).toBe(true);
   expect(suggested.components.every(c => c.x % 11 === 0 && c.y % 11 === 0)).toBe(true);
 
   await page.evaluate(() => {
@@ -46,13 +86,34 @@ test('Switchwire Suggest Layout and Auto Place share a valid deterministic place
   expect(secondRun.components).toEqual(firstRun);
 });
 
+test('Switchwire frame STL uses the same 280 by 177 orientation as the 2D frame', async ({ page }) => {
+  await openPlanner(page);
+  await page.selectOption('#printer', 'sw');
+  const hasThree = await page.evaluate(() => typeof window.THREE === 'object');
+  test.skip(!hasThree, 'Three.js CDN is unavailable in this test environment');
+  await page.getByRole('button', { name: /3D View/ }).click();
+
+  const footprint = await page.evaluate(() => {
+    stlCache['ems-files/FT EMS SW Frame V2.stl'] = new THREE.BoxGeometry(176.5, 280, 24);
+    build3DScene();
+    const frame = scene3d.children.find(child => child.userData.frameId === 'sw');
+    const size = new THREE.Vector3();
+    new THREE.Box3().setFromObject(frame).getSize(size);
+    return { width: size.x, depth: size.z };
+  });
+
+  expect(footprint.width).toBeCloseTo(280, 0);
+  expect(footprint.depth).toBeCloseTo(177, 0);
+});
+
 test('EnderWire uses the same valid deterministic placement path', async ({ page }) => {
-  await page.goto('/');
+  await openPlanner(page);
   await page.selectOption('#printer', 'enderwire');
   await chooseSuggestComponents(page);
 
   const suggested = await readLayout(page);
-  expect(suggested.components).toHaveLength(2);
+  expect(suggested.components).toHaveLength(1);
+  expect(suggested.components[0].name).toBe('Raspberry Pi 3/4');
   expect(suggested.valid).toBe(true);
 
   await page.getByRole('button', { name: /Auto Place/ }).click();
@@ -63,8 +124,224 @@ test('EnderWire uses the same valid deterministic placement path', async ({ page
   expect(secondRun.components).toEqual(firstRun.components);
 });
 
+test('Suggest Layout and Auto Place avoid an injected exclusion zone', async ({ page }) => {
+  await openPlanner(page);
+  await page.selectOption('#printer', 'sw');
+  await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'test-top-rail',
+      name: 'Test top rail',
+      points: [
+        { x: 0, y: 0 },
+        { x: 280, y: 0 },
+        { x: 280, y: 30 },
+        { x: 0, y: 30 },
+      ],
+    }];
+    draw();
+  });
+  await chooseSuggestComponents(page);
+
+  const suggested = await page.evaluate(() => ({
+    components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, rotation: c.rotation })),
+    issues: placed.flatMap(c => LayoutCore.getPlacementIssues(c, placed, printer, {
+      margin: FRAME_MARGIN,
+      padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
+    }).filter(issue => issue.type === 'excluded-area')),
+  }));
+  expect(suggested.components).toHaveLength(2);
+  expect(suggested.issues).toEqual([]);
+  expect(suggested.components.every(component => component.y >= 45)).toBe(true);
+
+  await page.getByRole('button', { name: /Auto Place/ }).click();
+  const autoPlaced = await page.evaluate(() => placed.map(c => ({ name: c.name, x: c.x, y: c.y, rotation: c.rotation })));
+  expect(autoPlaced).toEqual(suggested.components);
+});
+
+test('the 2D canvas visibly renders injected exclusion metadata', async ({ page }) => {
+  await openPlanner(page);
+  const colors = await page.evaluate(() => {
+    const sample = () => Array.from(ctx.getImageData(
+      Math.round(panX + 5 * scale),
+      Math.round(panY + 5 * scale),
+      1,
+      1,
+    ).data);
+    const before = sample();
+    printer.exclusionZones = [{
+      id: 'test-corner',
+      name: 'Test corner',
+      points: [
+        { x: 0, y: 0 },
+        { x: 30, y: 0 },
+        { x: 30, y: 30 },
+        { x: 0, y: 30 },
+      ],
+    }];
+    draw();
+    return { before, after: sample() };
+  });
+
+  expect(colors.after).not.toEqual(colors.before);
+});
+
+test('an out-of-frame exclusion is clipped to the nominal frame', async ({ page }) => {
+  await openPlanner(page);
+  const colors = await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'overhanging-zone',
+      rect: { x: -20, y: -20, w: 40, h: 40 },
+    }];
+    draw();
+    const sample = (x, y) => Array.from(ctx.getImageData(
+      Math.round(panX + x * scale),
+      Math.round(panY + y * scale),
+      1,
+      1,
+    ).data);
+    return { beyondFrame: sample(-10, -10), insideFrame: sample(10, 10) };
+  });
+
+  expect(colors.beyondFrame[3]).toBe(0);
+  expect(colors.insideFrame[3]).toBe(255);
+});
+
+test('the exported PNG contains the same exclusion overlay', async ({ page }) => {
+  await openPlanner(page);
+  const before = await downloadExportPixel(page, 165, 195);
+  await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'test-corner',
+      name: 'Test corner',
+      points: [
+        { x: 0, y: 0 },
+        { x: 30, y: 0 },
+        { x: 30, y: 30 },
+        { x: 0, y: 30 },
+      ],
+    }];
+    draw();
+  });
+  const after = await downloadExportPixel(page, 165, 195);
+
+  expect(after).not.toEqual(before);
+});
+
+test('manual exclusion violations remain in place and display their reason', async ({ page }) => {
+  await openPlanner(page);
+  const clickPoint = await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'test-corner',
+      name: 'Test corner',
+      points: [
+        { x: 0, y: 0 },
+        { x: 80, y: 0 },
+        { x: 80, y: 80 },
+        { x: 0, y: 80 },
+      ],
+    }];
+    placed = [{
+      id: 999,
+      name: 'Manual fixture',
+      x: 20, y: 20, w: 20, h: 20, rotation: 0,
+      catColor: '#4e79a7', stl: '', orient: 'flat', _locked: false, _col: false,
+    }];
+    updateBOM();
+    draw();
+    return { x: panX + 30 * scale, y: panY + 30 * scale };
+  });
+
+  await page.locator('#canvas').click({ position: clickPoint });
+  await expect(page.locator('#canvas-info')).toHaveText('Inside exclusion: Test corner');
+  expect(await page.evaluate(() => ({ x: placed[0].x, y: placed[0].y, invalid: placed[0]._col })))
+    .toEqual({ x: 20, y: 20, invalid: true });
+});
+
+test('legacy saves load unchanged and report new exclusion violations', async ({ page }) => {
+  await openPlanner(page);
+  await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'test-corner',
+      name: 'Test corner',
+      points: [
+        { x: 0, y: 0 },
+        { x: 80, y: 0 },
+        { x: 80, y: 80 },
+        { x: 0, y: 80 },
+      ],
+    }];
+  });
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /Load/ }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: 'legacy-layout.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      version: 4,
+      printer: 'trident-350',
+      components: [{
+        name: 'Legacy fixture',
+        x: 20, y: 20, w: 20, h: 20, rotation: 0,
+        catColor: '#4e79a7', stl: '', orient: 'flat', locked: false,
+      }],
+    })),
+  });
+
+  await expect.poll(() => page.evaluate(() => placed.length)).toBe(1);
+  expect(await page.evaluate(() => ({ x: placed[0].x, y: placed[0].y, invalid: placed[0]._col })))
+    .toEqual({ x: 20, y: 20, invalid: true });
+  await expect(page.locator('#canvas-info')).toContainText('Legacy fixture');
+  await expect(page.locator('#canvas-info')).toContainText('Test corner');
+});
+
+test('malformed exclusion metadata is reported without breaking the editor', async ({ page }) => {
+  await openPlanner(page);
+  await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'broken-zone',
+      points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+    }];
+    draw();
+  });
+
+  await expect(page.locator('#canvas-info')).toHaveText(
+    'Invalid exclusion metadata: broken-zone (too-few-points)',
+  );
+  await expect(page.locator('#canvas')).toBeVisible();
+});
+
+test('specialized cable-duct placement rejects excluded candidates', async ({ page }) => {
+  await openPlanner(page);
+  await page.evaluate(() => {
+    printer.exclusionZones = [{
+      id: 'test-top-band',
+      name: 'Test top band',
+      rect: { x: 0, y: 0, w: 470, h: 100 },
+    }];
+    draw();
+  });
+  const modal = page.locator('.wizard-modal');
+  await page.getByRole('button', { name: /Suggest Layout/ }).click();
+  await modal.locator('.wizard-search').fill('Cable Duct 120mm');
+  await modal.locator('.wizard-item').filter({ hasText: 'Cable Duct 120mm' }).locator('input[type="checkbox"]').check();
+  await modal.getByRole('button', { name: /Generate Layout/ }).click();
+
+  const duct = await page.evaluate(() => ({
+    name: placed[0]?.name,
+    y: placed[0]?.y,
+    issues: placed[0] ? LayoutCore.getPlacementIssues(placed[0], [], printer, {
+      exclusionPadding: COMP_PAD,
+    }) : [],
+  }));
+  expect(duct.name).toBe('Cable Duct 120mm');
+  expect(duct.y).toBeGreaterThan(100);
+  expect(duct.issues.filter(issue => issue.type === 'excluded-area')).toEqual([]);
+});
+
 test('Auto Place preserves the existing layout when a component is impossible to place', async ({ page }) => {
-  await page.goto('/');
+  await openPlanner(page);
   await page.selectOption('#printer', 'sw');
   await page.evaluate(() => {
     placed = [{
