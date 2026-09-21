@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="assets/ft-ems-favicon.svg">
 <title>FT EMS Layout Planner</title>
 <script>
 try {
-  const savedTheme = localStorage.getItem('ft-ems-theme');
+  const savedPreferences = JSON.parse(localStorage.getItem('ft-ems-preferences') || 'null');
+  const savedTheme = savedPreferences?.theme || localStorage.getItem('ft-ems-theme');
   if (['classic', 'readable-dark', 'light'].includes(savedTheme)) {
     document.documentElement.dataset.theme = savedTheme;
   }
@@ -33,6 +35,7 @@ try {
   --modal-backdrop: rgba(0,0,0,0.7); --active-text: #e0e0e0; --danger-text: #e0e0e0;
   --font-xs: 10px; --font-sm: 11px; --font-md: 12px; --font-base: 13px;
   --canvas-bg: #0d1117; --canvas-grid: rgba(255,255,255,0.05);
+  --canvas-cell: rgba(255,255,255,0.025); --canvas-frame: #243140;
   --canvas-dot: rgba(255,255,255,0.18); --canvas-border: #3a5a8a;
   --canvas-safe: rgba(58,90,138,0.3); --canvas-dimension: #4a6a9a;
   --canvas-padding: rgba(255,255,255,0.03); --canvas-padding-border: rgba(255,255,255,0.08);
@@ -55,6 +58,7 @@ try {
   --active-text: #07111f; --danger-text: #ffffff;
   --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
   --canvas-bg: #101827; --canvas-grid: rgba(255,255,255,0.09);
+  --canvas-cell: rgba(255,255,255,0.045); --canvas-frame: #304764;
   --canvas-dot: rgba(255,255,255,0.32); --canvas-border: #7da2d6;
   --canvas-safe: rgba(125,162,214,0.55); --canvas-dimension: #cbd5e1;
   --canvas-padding: rgba(255,255,255,0.055); --canvas-padding-border: rgba(255,255,255,0.16);
@@ -72,6 +76,7 @@ try {
   --modal-backdrop: rgba(15,23,42,0.55); --active-text: #ffffff; --danger-text: #ffffff;
   --font-xs: 11px; --font-sm: 12px; --font-md: 13px; --font-base: 14px;
   --canvas-bg: #f8fafc; --canvas-grid: rgba(15,23,42,0.09);
+  --canvas-cell: rgba(15,23,42,0.025); --canvas-frame: #d6dee8;
   --canvas-dot: rgba(15,23,42,0.28); --canvas-border: #64748b;
   --canvas-safe: rgba(71,85,105,0.45); --canvas-dimension: #334155;
   --canvas-padding: rgba(15,23,42,0.035); --canvas-padding-border: rgba(15,23,42,0.14);
@@ -85,6 +90,13 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #topbar { background: var(--panel); border-bottom: 1px solid var(--accent); padding: 8px 16px; display: flex; align-items: center; gap: 12px; z-index: 10; }
 #topbar h1 { font-size: 18px; font-weight: 600; color: var(--highlight); white-space: nowrap; }
 #topbar h1 span { color: var(--text-dim); font-weight: 400; font-size: var(--font-base); margin-left: 8px; }
+.github-corner { position: fixed; right: 0; bottom: 0; z-index: 20; width: 76px; height: 76px; color: var(--text); overflow: hidden; }
+.github-corner::before { content: ''; position: absolute; right: -38px; bottom: -38px; width: 108px; height: 108px; background: var(--highlight); transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(255,255,255,0.12); }
+.github-corner svg { position: absolute; right: 8px; bottom: 8px; width: 27px; height: 27px; fill: currentColor; transition: transform 0.15s ease; }
+.github-corner:hover svg, .github-corner:focus-visible svg { transform: scale(1.12); }
+.github-corner:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; }
+.author-link { color: var(--highlight); font-size: var(--font-base); font-weight: 500; text-decoration: none; white-space: nowrap; border-bottom: 1px dotted currentColor; }
+.author-link:hover, .author-link:focus-visible { color: var(--text); border-bottom-style: solid; }
 .btn { background: var(--accent); color: var(--text); border: 1px solid var(--control-border); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: var(--font-base); transition: all 0.15s; white-space: nowrap; }
 .btn:hover { background: var(--control-hover); border-color: var(--control-border-hover); }
 .btn-danger { background: var(--danger); color: var(--danger-text); }
@@ -126,6 +138,14 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 #frame-dimensions { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); }
 #custom-exclusion-list { display: grid; gap: 4px; margin-top: 6px; font-size: var(--font-sm); color: var(--text-dim); }
 #custom-exclusion-list [data-testid="custom-exclusion-row"] { border: 1px solid var(--accent); padding: 4px; }
+#custom-frame-controls { padding: 10px 12px; border-bottom: 1px solid var(--accent); }
+#custom-frame-controls[hidden] { display: none; }
+#custom-frame-controls legend { font-size: var(--font-md); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+#custom-frame-controls .custom-frame-fields { display: flex; gap: 6px; margin: 6px 0; }
+#custom-frame-controls label { flex: 1; font-size: var(--font-sm); color: var(--text-dim); }
+#custom-frame-controls input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 6px; border-radius: 4px; font-size: var(--font-base); }
+#custom-frame-controls button { width: 100%; }
+#frame-dimensions { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); }
 #search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
 #search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box input::placeholder { color: var(--text-dim); }
@@ -248,7 +268,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 <body>
 
 <div id="topbar">
-  <h1>⚡ FT EMS Layout Planner <span>by FizzysTech</span></h1>
+  <h1>⚡ FT EMS Layout Planner <span>uses FT EMS components &amp; models by <a class="author-link" href="https://github.com/fizzystech" target="_blank" rel="noopener noreferrer">FizzysTech</a></span></h1>
   <div class="topbar-spacer"></div>
   <button class="btn" id="btn-2d" onclick="setView('2d')">📐 2D Layout</button>
   <button class="btn" id="btn-3d" onclick="setPerspective3D()">🧊 3D View</button>
@@ -268,6 +288,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
     <option value="light">☀️ Light</option>
   </select>
 </div>
+
+<a class="github-corner" href="https://github.com/akashrpatel/ft-ems-visualizer" target="_blank" rel="noopener noreferrer" aria-label="View this project on GitHub" title="View this project on GitHub">
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+</a>
 
 <div id="main">
   <div id="sidebar">
@@ -296,6 +320,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
         </label>
         <label for="custom-frame-height">Height (mm)
           <input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="any" value="400">
+          <input id="custom-frame-width" aria-label="Custom frame width (mm)" type="number" min="1" step="1" value="400">
+        </label>
+        <label for="custom-frame-height">Height (mm)
+          <input id="custom-frame-height" aria-label="Custom frame height (mm)" type="number" min="1" step="1" value="400">
         </label>
       </div>
       <button class="btn" type="button" onclick="applyCustomFrame()">Apply custom frame</button>
@@ -377,6 +405,11 @@ const BASE_PRINTERS = [
     { stl: 'ems-files/ft-ems-trident-doom-rear-4-4.stl' },
   ]},
   { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, frameStls: [
+  { id: 'sw',           name: 'Voron Switchwire',        w: 280, h: 177, frameYaw: -90, exclusionZones: [
+    // Rounded outward from the raised rail's transformed STL bounds:
+    // x 52.606..257.606, y 17.919..38.178 mm.
+    { id: 'switchwire-raised-rail', name: 'Raised electronics rail', rect: { x: 52, y: 17, w: 206, h: 22 } },
+  ], frameStls: [
     { stl: 'ems-files/FT EMS SW Frame V2.stl' },
   ]},
   { id: 'micron-180',   name: 'Micron 180',              w: 280, h: 287, frameStls: [
@@ -544,6 +577,32 @@ let topDownDrawPreview = null;
 let topDownSelectedZoneId = null;
 let topDownZoneDrag = null;
 
+const PREFERENCES_STORAGE_KEY = 'ft-ems-preferences';
+const VALID_THEMES = new Set(['classic', 'readable-dark', 'light']);
+const VALID_VIEWS = new Set(['2d', '3d']);
+
+function readPreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
+    return {
+      theme: VALID_THEMES.has(saved.theme) ? saved.theme : null,
+      printerId: typeof saved.printerId === 'string' ? saved.printerId : null,
+      view: VALID_VIEWS.has(saved.view) ? saved.view : null,
+      search: typeof saved.search === 'string' ? saved.search : '',
+    };
+  } catch (_) {
+    return { theme: null, printerId: null, view: null, search: '' };
+  }
+}
+
+function writePreferences(patch) {
+  try {
+    const preferences = { ...readPreferences(), ...patch };
+    localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+    if (preferences.theme) localStorage.setItem(THEME_STORAGE_KEY, preferences.theme);
+  } catch (_) {}
+}
+
 // 2D Canvas
 const cvs = document.getElementById('canvas');
 const ctx = cvs.getContext('2d');
@@ -687,7 +746,9 @@ function themeColor(name) {
 }
 
 function initTheme() {
-  const activeTheme = THEMES.has(document.documentElement.dataset.theme)
+  const savedTheme = readPreferences().theme;
+  const activeTheme = THEMES.has(savedTheme) ? savedTheme
+    : THEMES.has(document.documentElement.dataset.theme)
     ? document.documentElement.dataset.theme
     : 'classic';
   document.documentElement.dataset.theme = activeTheme;
@@ -698,13 +759,14 @@ function setTheme(theme) {
   const nextTheme = THEMES.has(theme) ? theme : 'classic';
   document.documentElement.dataset.theme = nextTheme;
   document.getElementById('theme-select').value = nextTheme;
-  try { localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch (_) {}
+  writePreferences({ theme: nextTheme });
 
   draw();
 }
 
 // ============== INIT ==============
 function init() {
+  const preferences = readPreferences();
   initTheme();
   document.getElementById('authoring-controls').hidden = !AUTHORING_MODE;
   document.getElementById('btn-topdown').hidden = !AUTHORING_MODE;
@@ -720,12 +782,18 @@ function init() {
   sel.appendChild(customOption);
   sel.value = printer.id;
   renderAuthoringZones();
+  const savedPrinter = PRINTERS.find(p => p.id === preferences.printerId);
+  if (savedPrinter) printer = savedPrinter;
+  sel.value = printer.id;
   updateFrameDimensions();
   buildLibrary();
+  const search = document.getElementById('search');
+  search.value = preferences.search;
+  onSearch();
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); if (currentView === '3d') resize3D(); });
   setupCanvasEvents();
-  setView('2d');
+  setView(preferences.view || '2d');
 }
 
 
@@ -768,6 +836,7 @@ function buildLibrary() {
 
 function onSearch() {
   const q = document.getElementById('search').value.toLowerCase().trim();
+  writePreferences({ search: document.getElementById('search').value });
   document.querySelectorAll('.comp-item').forEach(el => {
     el.classList.toggle('filtered-out', q && !el.dataset.name.includes(q));
   });
@@ -784,6 +853,7 @@ function onSearch() {
 // ============== VIEW SWITCHING ==============
 function setView(v) {
   currentView = v;
+  writePreferences({ view: v });
   document.getElementById('btn-2d').classList.toggle('btn-active', v === '2d');
   document.getElementById('btn-3d').classList.toggle('btn-active', v === '3d');
   document.getElementById('canvas').style.display = v === '2d' ? 'block' : 'none';
@@ -817,6 +887,12 @@ function onPrinterChange() {
   if (rename) rename.disabled = true;
   renderAuthoringZones();
   updateFrameDimensions();
+    return;
+  }
+  printer = PRINTERS.find(p => p.id === selectedId);
+  updateFrameDimensions();
+  printer = PRINTERS.find(p => p.id === document.getElementById('printer').value);
+  writePreferences({ printerId: printer.id });
   centerView(); draw();
   if (currentView === '3d') refresh3DScene();
 }
@@ -845,6 +921,10 @@ function updateFrameDimensions() {
   updateCustomExclusionVisibility();
   document.getElementById('frame-dimensions').textContent =
     `${printer.id === 'custom' ? 'Custom frame' : printer.name}: ${printer.w} × ${printer.h} mm`;
+function updateFrameDimensions() {
+  updateCustomFrameVisibility();
+  document.getElementById('frame-dimensions').textContent =
+    `${printer.name.startsWith('Custom') ? 'Custom frame' : printer.name}: ${printer.w} × ${printer.h} mm`;
 }
 
 function updateCustomFrameVisibility() {
@@ -856,6 +936,8 @@ function updateCustomExclusionVisibility() {
   const controls = document.getElementById('custom-exclusion-controls');
   controls.hidden = document.getElementById('printer').value !== 'custom';
   renderCustomExclusions();
+  const select = document.getElementById('printer');
+  controls.hidden = !select || select.value !== 'custom';
 }
 
 function applyCustomFrame() {
@@ -1006,6 +1088,28 @@ function exportModelDefinition() {
   link.download = `ft-ems-model-${printer.id}.json`;
   link.click();
   URL.revokeObjectURL(link.href);
+}
+
+  const status = document.getElementById('frame-dimensions');
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    status.textContent = 'Enter positive width and height values.';
+    return;
+  }
+
+  printer = { id: 'custom', name: `Custom — ${width}×${height}mm`, w: width, h: height };
+  const select = document.getElementById('printer');
+  let option = select.querySelector('option[value="custom"]');
+  if (!option) {
+    option = document.createElement('option');
+    option.value = 'custom';
+    select.appendChild(option);
+  }
+  option.textContent = printer.name;
+  select.value = 'custom';
+  updateFrameDimensions();
+  centerView();
+  draw();
+  if (currentView === '3d') refresh3DScene();
 }
 
 function centerView() {
@@ -1204,11 +1308,41 @@ function annotateLayoutIssues() {
 function drawHex(cx, cy, r) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 3 * i - Math.PI / 6;
+    const a = Math.PI / 3 * i;
     const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+function drawHoneycombGrid() {
+  const radius = 9;
+  const columnStep = radius * 1.5;
+  const rowStep = radius * Math.sqrt(3);
+  const startX = -radius;
+  const startY = -radius;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
+  ctx.clip();
+  ctx.fillStyle = themeColor('--canvas-bg');
+  ctx.fillRect(FRAME_MARGIN, FRAME_MARGIN, printer.w - FRAME_MARGIN * 2, printer.h - FRAME_MARGIN * 2);
+  ctx.lineWidth = 3.6 / scale;
+  ctx.strokeStyle = themeColor('--canvas-frame');
+  ctx.fillStyle = themeColor('--canvas-cell');
+
+  let column = 0;
+  for (let x = startX; x <= printer.w + radius; x += columnStep) {
+    const yOffset = (column % 2) * rowStep / 2;
+    for (let y = startY + yOffset; y <= printer.h + radius; y += rowStep) {
+      drawHex(x, y, radius);
+      ctx.fill();
+      ctx.stroke();
+    }
+    column++;
+  }
+  ctx.restore();
 }
 
 function updateObjectToolbar() {
@@ -1258,26 +1392,12 @@ function draw() {
   ctx.translate(panX, panY);
   ctx.scale(scale, scale);
 
-  // Frame bg
-  ctx.fillStyle = themeColor('--canvas-bg');
+  // Solid printed frame and inset honeycomb field.
+  ctx.fillStyle = themeColor('--canvas-frame');
   ctx.fillRect(0, 0, printer.w, printer.h);
+  drawHoneycombGrid();
 
-  // Hex grid — matches FT EMS standoff pattern (22mm center-to-center)
-  let col = 0;
-  for (let x = HEX_OFFSET_X; x <= printer.w - HEX_OFFSET_X; x += HEX_SPACING) {
-    const yOff = (col % 2 === 0) ? HEX_OFFSET_Y : HEX_OFFSET_Y + HEX_ROW / 2;
-    for (let y = yOff; y <= printer.h - HEX_OFFSET_Y; y += HEX_ROW) {
-      // Map from panel-bottom-origin to canvas-top-origin
-      const cy = printer.h - y;
-      ctx.strokeStyle = themeColor('--canvas-grid');
-      ctx.lineWidth = 0.3 / scale;
-      drawHex(x, cy, HEX_R);
-      ctx.stroke();
-      ctx.fillStyle = themeColor('--canvas-dot');
-      ctx.beginPath(); ctx.arc(x, cy, 1.0, 0, Math.PI * 2); ctx.fill();
-    }
-    col++;
-  }
+  drawExclusionZones(ctx, 1 / scale);
 
   drawExclusionZones(ctx, 1 / scale);
   drawAuthoringZoneControls(ctx, 1 / scale);
@@ -2437,7 +2557,7 @@ function showChecklist() {
     counts[c.name] = (counts[c.name] || 0) + 1;
     if (c.stl) stls[c.name] = c.stl;
   }
-  const printerName = PRINTERS.find(p => p.id === printer.id).name;
+  const printerName = printer.name;
   const rows = Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0]))
     .map(([name, count]) => `
       <tr>
@@ -2492,7 +2612,8 @@ function exportChecklistCSV() {
 // ============== SAVE/LOAD/EXPORT ==============
 function saveLayout() {
   const data = {
-    version: 4, printer: printer.id,
+    version: 5, printer: printer.id,
+    ...(printer.id === 'custom' ? { customFrame: { width: printer.w, height: printer.h } } : {}),
 
     components: placed.map(c => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h, rotation: c.rotation, catColor: c.catColor, stl: c.stl, orient: c.orient || 'flat', locked: c._locked || false })),
     ...(printer.id === 'custom' ? {
@@ -2521,10 +2642,12 @@ function loadLayout() {
           document.getElementById('custom-frame-width').value = data.customFrame.width;
           document.getElementById('custom-frame-height').value = data.customFrame.height;
           document.getElementById('printer').value = 'custom';
+          document.getElementById('custom-frame-width').value = data.customFrame.width;
+          document.getElementById('custom-frame-height').value = data.customFrame.height;
           applyCustomFrame();
         } else if (data.printer) {
           const p = PRINTERS.find(pr => pr.id === data.printer);
-          if (p) { printer = p; document.getElementById('printer').value = p.id; }
+          if (p) { printer = p; document.getElementById('printer').value = p.id; updateFrameDimensions(); }
         }
 
         placed = (data.components || []).map(c => ({ ...c, id: nextId++, _locked: c.locked || false, _col: false }));
@@ -2561,7 +2684,7 @@ function exportImage() {
   const ex = ec.getContext('2d');
   ex.fillStyle = themeColor('--bg'); ex.fillRect(0, 0, ew, eh);
   ex.fillStyle = themeColor('--highlight'); ex.font = `bold ${14*es}px sans-serif`; ex.textAlign = 'left';
-  ex.fillText(`FT EMS — ${PRINTERS.find(p=>p.id===printer.id).name}`, pad*es*0.4, 20*es);
+  ex.fillText(`FT EMS — ${printer.name}`, pad*es*0.4, 20*es);
   ex.save(); ex.translate(pad*es, (pad+10)*es); ex.scale(es, es);
   ex.fillStyle = themeColor('--canvas-bg'); ex.fillRect(0, 0, printer.w, printer.h);
   // Hex dots
@@ -2596,7 +2719,7 @@ function showSuggestLayout() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
 
-  const printerName = PRINTERS.find(p => p.id === printer.id)?.name || printer.id;
+  const printerName = printer.name;
   let catHtml = '';
   CATEGORIES.forEach((cat, ci) => {
     let itemsHtml = '';

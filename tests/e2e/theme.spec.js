@@ -58,3 +58,17 @@ test('changing the UI theme does not alter the 3D viewport', async ({ page }) =>
   const light3d = await page.screenshot({ clip: backgroundSample });
   expect(light3d.equals(classic3d)).toBe(true);
 });
+
+test('user preferences survive a reload', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByLabel('Printer Model').selectOption('v24-250');
+  await page.getByPlaceholder('🔍 Search components...').fill('fan');
+  await page.getByLabel('Color theme').selectOption('light');
+
+  await page.reload();
+
+  await expect(page.getByLabel('Printer Model')).toHaveValue('v24-250');
+  await expect(page.getByPlaceholder('🔍 Search components...')).toHaveValue('fan');
+  await expect(page.getByLabel('Color theme')).toHaveValue('light');
+});
