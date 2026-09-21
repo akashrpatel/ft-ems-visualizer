@@ -32,6 +32,10 @@ test('custom exclusions can be drawn on the planner canvas', async ({ page }) =>
   await page.mouse.up();
 
   await expect(page.locator('#custom-exclusion-list')).toContainText('Custom rail');
+  await page.locator('#custom-exclusion-list .model-zone-row').filter({ hasText: 'Custom rail' }).click();
+  await page.getByLabel('Custom exclusion name').fill('Renamed rail');
+  await page.getByRole('button', { name: 'Rename selected' }).click();
+  await expect(page.locator('#custom-exclusion-list')).toContainText('Renamed rail');
 });
 
 test('authoring mode exposes built-in model exclusions', async ({ page }) => {

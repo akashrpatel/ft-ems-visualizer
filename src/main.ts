@@ -617,9 +617,12 @@ function addCustomExclusionFromRect(rect, providedName) {
   let id = base;
   let suffix = 2;
   while (customExclusionZones.some(zone => zone.id === id)) id = `${base}-${suffix++}`;
-  customExclusionZones.push({ id, name, type: 'custom', rect });
+  const zone = { id, name, type: 'custom', rect };
+  customExclusionZones.push(zone);
   customPrinter.exclusionZones = customExclusionZones;
   if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+  topDownSelectedZoneId = id;
+  syncCustomExclusionInputs(zone);
   persistActiveModelDefinition();
   renderCustomExclusions();
   draw();
@@ -707,6 +710,9 @@ function renderCustomExclusions() {
   list.replaceChildren(...customExclusionZones.map(zone => {
     const row = document.createElement('div');
     row.className = 'model-zone-row';
+    row.classList.toggle('selected', zone.id === topDownSelectedZoneId);
+    row.title = 'Select exclusion';
+    row.onclick = () => selectCustomExclusion(zone.id);
     const label = document.createElement('span');
     label.textContent = `${zone.name} — ${formatMm(zone.rect.w)} × ${formatMm(zone.rect.h)} mm`;
     const remove = document.createElement('button');
@@ -714,16 +720,58 @@ function renderCustomExclusions() {
     remove.type = 'button';
     remove.textContent = '×';
     remove.setAttribute('aria-label', `Delete ${zone.name}`);
-    remove.onclick = () => {
+    remove.onclick = event => {
+      event.stopPropagation();
       customExclusionZones = customExclusionZones.filter(item => item.id !== zone.id);
       customPrinter.exclusionZones = customExclusionZones;
       if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+      if (topDownSelectedZoneId === zone.id) topDownSelectedZoneId = null;
+      persistActiveModelDefinition();
       renderCustomExclusions();
       draw();
     };
     row.append(label, remove);
     return row;
   }));
+  const rename = document.getElementById('custom-exclusion-rename');
+  if (rename) rename.disabled = !customExclusionZones.some(zone => zone.id === topDownSelectedZoneId);
+}
+
+function syncCustomExclusionInputs(zone) {
+  if (!zone) return;
+  const values = {
+    'custom-exclusion-name': zone.name || zone.id,
+    'custom-exclusion-x': formatMm(zone.rect?.x),
+    'custom-exclusion-y': formatMm(zone.rect?.y),
+    'custom-exclusion-width': formatMm(zone.rect?.w),
+    'custom-exclusion-height': formatMm(zone.rect?.h),
+  };
+  for (const [id, value] of Object.entries(values)) {
+    const input = document.getElementById(id);
+    if (input) input.value = value;
+  }
+  const rename = document.getElementById('custom-exclusion-rename');
+  if (rename) rename.disabled = false;
+}
+
+function selectCustomExclusion(id) {
+  const zone = customExclusionZones.find(item => item.id === id);
+  if (!zone) return;
+  topDownSelectedZoneId = id;
+  syncCustomExclusionInputs(zone);
+  renderCustomExclusions();
+  draw();
+}
+
+function renameSelectedCustomExclusion() {
+  const zone = customExclusionZones.find(item => item.id === topDownSelectedZoneId);
+  const name = document.getElementById('custom-exclusion-name')?.value.trim();
+  if (!zone || !name) return;
+  zone.name = name;
+  if (printer.id === 'custom') printer.exclusionZones = customExclusionZones;
+  persistActiveModelDefinition();
+  renderCustomExclusions();
+  draw();
 }
 
 function exportModelDefinition() {
@@ -1220,10 +1268,11 @@ function onMouseDown(e) {
       draw();
       return;
     }
-    if (AUTHORING_MODE) {
+    if (AUTHORING_MODE || printer.id === 'custom') {
       const zone = hitExclusionZone(mx, my);
       if (zone) {
-        selectAuthoringZone(zone.id);
+        if (printer.id === 'custom') selectCustomExclusion(zone.id);
+        else selectAuthoringZone(zone.id);
         draw();
         return;
       }
@@ -3467,12 +3516,12 @@ function autoPlaceExisting() {
 // ============== GO ==============
 
 // Temporary compatibility bridge for the existing inline HTML handlers.
-Object.assign(window, {
+  Object.assign(window, {
   setView, saveLayout, loadLayout, clearLayout, exportImage, showSuggestLayout,
   autoPlaceExisting, setTheme, onPrinterChange, onSearch, duplicateSelected,
   rotateComponent, toggleSelectedLock, removeSelected, showChecklist,
   applyCustomFrame, addCustomExclusion, addModelExclusion, exportModelDefinition,
-  toggleModelDrawing, setTopDownView, renameSelectedAuthoringZone,
+  toggleModelDrawing, setTopDownView, renameSelectedAuthoringZone, renameSelectedCustomExclusion,
   LayoutCore, THREE,
   exportChecklistCSV, wizardFilter, runSuggestLayout,
 });
