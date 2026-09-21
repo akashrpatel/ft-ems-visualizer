@@ -18,9 +18,25 @@ test('custom frames expose dimensions and exclusions in the planner', async ({ p
   await expect(page.locator('#custom-exclusion-list')).toContainText('Rear rail');
 });
 
+test('custom exclusions can be drawn on the planner canvas', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Printer Model').selectOption('custom');
+  await page.getByLabel('Custom exclusion name').fill('Custom rail');
+  await page.getByRole('button', { name: 'Draw exclusion' }).click();
+
+  const canvas = page.locator('#canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + 180, box.y + 160);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 300, box.y + 220);
+  await page.mouse.up();
+
+  await expect(page.locator('#custom-exclusion-list')).toContainText('Custom rail');
+});
+
 test('authoring mode exposes built-in model exclusions', async ({ page }) => {
   await page.goto('/?mode=authoring');
-  await expect(page.locator('#model-controls')).toBeVisible();
+  await expect(page.locator('#authoring-controls')).toBeVisible();
   await page.getByLabel('Printer Model').selectOption('sw');
   await expect(page.locator('#authoring-zone-list')).toContainText('Raised electronics rail');
 });

@@ -221,6 +221,7 @@ let customExclusionZones = [];
 let customPrinter = { id: 'custom', name: 'Custom — 400×400mm', w: 400, h: 400, exclusionZones: customExclusionZones };
 let modelDrawing = false;
 let modelDrawStart = null;
+let modelDrawCurrent = null;
 let topDownSelectedZoneId = null;
 let topDown3D = false;
 const AUTHORED_MODELS_STORAGE_KEY = 'ft-ems-authored-models';
@@ -607,6 +608,11 @@ function addCustomExclusion() {
     h: Number(document.getElementById('custom-exclusion-height')?.value),
   };
   if (!Object.values(rect).every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) return;
+  addCustomExclusionFromRect(rect);
+}
+
+function addCustomExclusionFromRect(rect, providedName) {
+  const name = providedName || document.getElementById('custom-exclusion-name')?.value.trim() || 'Custom exclusion';
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exclusion';
   let id = base;
   let suffix = 2;
@@ -753,12 +759,16 @@ function persistActiveModelDefinition() {
 }
 
 function toggleModelDrawing() {
-  if (!AUTHORING_MODE) return;
+  if (!AUTHORING_MODE && printer.id !== 'custom') return;
   modelDrawing = !modelDrawing;
   modelDrawStart = null;
-  const button = document.getElementById('model-draw-toggle');
-  if (button) button.textContent = modelDrawing ? 'Click second corner (cancel with Esc)' : 'Draw exclusion';
+  modelDrawCurrent = null;
+  const button = printer.id === 'custom'
+    ? document.getElementById('custom-draw-toggle')
+    : document.getElementById('model-draw-toggle');
+  if (button) button.textContent = modelDrawing ? 'Drag rectangle (Esc to cancel)' : 'Draw exclusion';
   cvs.style.cursor = modelDrawing ? 'crosshair' : 'default';
+  draw();
 }
 
 function centerView() {
@@ -1084,6 +1094,23 @@ function draw() {
     ctx.fillText(zone.name || zone.id, rect.x + 2, rect.y + 2);
   }
 
+  // Preview the exclusion rectangle while drawing it on the canvas.
+  if (modelDrawing && modelDrawStart && modelDrawCurrent) {
+    const rect = {
+      x: Math.min(modelDrawStart.x, modelDrawCurrent.x),
+      y: Math.min(modelDrawStart.y, modelDrawCurrent.y),
+      w: Math.abs(modelDrawCurrent.x - modelDrawStart.x),
+      h: Math.abs(modelDrawCurrent.y - modelDrawStart.y),
+    };
+    ctx.fillStyle = 'rgba(233,69,96,0.24)';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1 / scale;
+    ctx.setLineDash([5 / scale, 4 / scale]);
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.setLineDash([]);
+  }
+
   // Dimensions
   const dimensionFontPx = document.documentElement.dataset.theme === 'readable-dark' ? 13 : 10;
   ctx.fillStyle = themeColor('--canvas-dimension'); ctx.font = `${dimensionFontPx/scale}px sans-serif`; ctx.textAlign = 'center';
@@ -1185,28 +1212,11 @@ function onMouseDown(e) {
     cvs.style.cursor = 'grabbing'; e.preventDefault(); return;
   }
   if (e.button === 0) {
-    if (AUTHORING_MODE && modelDrawing) {
+    if (modelDrawing && (AUTHORING_MODE || printer.id === 'custom')) {
       const point = toCanvas(mx, my);
-      if (!modelDrawStart) {
-        modelDrawStart = point;
-      } else {
-        const rect = {
-          x: Math.min(modelDrawStart.x, point.x),
-          y: Math.min(modelDrawStart.y, point.y),
-          w: Math.abs(point.x - modelDrawStart.x),
-          h: Math.abs(point.y - modelDrawStart.y),
-        };
-        if (rect.w > 0.1 && rect.h > 0.1) {
-          const input = document.getElementById('model-zone-name');
-          if (input && !input.value.trim()) input.value = 'Drawn exclusion';
-          addModelExclusionFromRect(rect);
-        }
-        modelDrawStart = null;
-        modelDrawing = false;
-        const button = document.getElementById('model-draw-toggle');
-        if (button) button.textContent = 'Draw exclusion on canvas';
-        cvs.style.cursor = 'default';
-      }
+      modelDrawStart = point;
+      modelDrawCurrent = point;
+      e.preventDefault();
       draw();
       return;
     }
@@ -1236,6 +1246,11 @@ function onMouseMove(e) {
   const rect = cvs.getBoundingClientRect();
   const mx = e.clientX-rect.left, my = e.clientY-rect.top;
   if (panning) { panX = e.clientX-panStart.x; panY = e.clientY-panStart.y; draw(); return; }
+  if (modelDrawing && modelDrawStart) {
+    modelDrawCurrent = toCanvas(mx, my);
+    draw();
+    return;
+  }
   if (dragging) {
     const p = toCanvas(mx, my);
     dragging.comp.x = snap(p.x - dragging.offX);
@@ -1247,6 +1262,44 @@ function onMouseMove(e) {
 }
 
 function onMouseUp() {
+  if (modelDrawing && modelDrawStart) {
+    const point = modelDrawCurrent || modelDrawStart;
+    const rect = {
+      x: Math.min(modelDrawStart.x, point.x),
+      y: Math.min(modelDrawStart.y, point.y),
+      w: Math.abs(point.x - modelDrawStart.x),
+      h: Math.abs(point.y - modelDrawStart.y),
+    };
+    if (rect.w > 0.1 && rect.h > 0.1) {
+      if (printer.id === 'custom') {
+        const input = document.getElementById('custom-exclusion-name');
+        if (input && !input.value.trim()) input.value = 'Drawn exclusion';
+        addCustomExclusionFromRect(rect);
+      } else {
+        const input = document.getElementById('model-zone-name');
+        if (input && !input.value.trim()) input.value = 'Drawn exclusion';
+        addModelExclusionFromRect(rect);
+      }
+      const xInput = document.getElementById(printer.id === 'custom' ? 'custom-exclusion-x' : 'model-zone-x');
+      const yInput = document.getElementById(printer.id === 'custom' ? 'custom-exclusion-y' : 'model-zone-y');
+      const wInput = document.getElementById(printer.id === 'custom' ? 'custom-exclusion-width' : 'model-zone-w');
+      const hInput = document.getElementById(printer.id === 'custom' ? 'custom-exclusion-height' : 'model-zone-h');
+      if (xInput) xInput.value = formatMm(rect.x);
+      if (yInput) yInput.value = formatMm(rect.y);
+      if (wInput) wInput.value = formatMm(rect.w);
+      if (hInput) hInput.value = formatMm(rect.h);
+    }
+    modelDrawing = false;
+    modelDrawStart = null;
+    modelDrawCurrent = null;
+    const button = printer.id === 'custom'
+      ? document.getElementById('custom-draw-toggle')
+      : document.getElementById('model-draw-toggle');
+    if (button) button.textContent = 'Draw exclusion';
+    cvs.style.cursor = 'default';
+    draw();
+    return;
+  }
   if (dragging) {
     clampToFrame(dragging.comp);
     draw();
@@ -1273,7 +1326,7 @@ function onKey(e) {
   else if (e.key === 'r' || e.key === 'R') {
     rotateComponent(selected);
   }
-  else if (e.key === 'Escape') { selected = null; modelDrawing = false; modelDrawStart = null; cvs.style.cursor = 'default'; draw(); }
+  else if (e.key === 'Escape') { selected = null; modelDrawing = false; modelDrawStart = null; modelDrawCurrent = null; cvs.style.cursor = 'default'; draw(); }
   else if (e.key === 'l' || e.key === 'L') {
     toggleSelectedLock();
   }

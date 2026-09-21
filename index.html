@@ -282,6 +282,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
     <fieldset id="custom-exclusion-controls" hidden>
       <legend>Custom exclusions</legend>
       <label for="custom-exclusion-name">Name<input aria-label="Custom exclusion name" id="custom-exclusion-name" placeholder="Cable rail"></label>
+      <button class="btn" id="custom-draw-toggle" type="button" onclick="toggleModelDrawing()">Draw exclusion</button>
       <div class="control-grid">
         <label for="custom-exclusion-x">X<input aria-label="Custom exclusion X" id="custom-exclusion-x" type="number" step="any" value="0"></label>
         <label for="custom-exclusion-y">Y<input aria-label="Custom exclusion Y" id="custom-exclusion-y" type="number" step="any" value="0"></label>
