@@ -668,7 +668,7 @@ function renderModelZones() {
   if (!list) return;
   list.replaceChildren(...(printer.exclusionZones || []).map(zone => {
     const row = document.createElement('div');
-    row.className = 'model-zone-row';
+    row.className = 'custom-zone-row';
     row.classList.toggle('selected', zone.id === topDownSelectedZoneId);
     row.onclick = () => selectAuthoringZone(zone.id);
     const label = document.createElement('span');
@@ -710,14 +710,15 @@ function renderCustomExclusions() {
   if (!list) return;
   list.replaceChildren(...customExclusionZones.map(zone => {
     const row = document.createElement('div');
-    row.className = 'model-zone-row';
+    row.className = 'custom-zone-row';
     row.classList.toggle('selected', zone.id === topDownSelectedZoneId);
     row.title = 'Select exclusion';
     row.onclick = () => selectCustomExclusion(zone.id);
     const label = document.createElement('span');
+    label.className = 'custom-zone-label';
     label.textContent = `${zone.name} — ${formatMm(zone.rect.w)} × ${formatMm(zone.rect.h)} mm`;
     const remove = document.createElement('button');
-    remove.className = 'btn';
+    remove.className = 'custom-zone-delete';
     remove.type = 'button';
     remove.textContent = '×';
     remove.setAttribute('aria-label', `Delete ${zone.name}`);

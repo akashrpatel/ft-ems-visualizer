@@ -107,6 +107,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .model-zone-row.selected { background: var(--surface-hover); color: var(--text); }
 .model-zone-row span { flex: 1; min-width: 0; }
 .model-zone-row button { width: auto !important; margin: 0 !important; padding: 2px 6px; }
+#custom-exclusion-list { display: grid; gap: 4px; margin-top: 6px; font-size: var(--font-sm); color: var(--text-dim); }
+#custom-exclusion-list .custom-zone-row { display: flex; align-items: center; gap: 6px; border: 1px solid var(--accent); padding: 4px; cursor: pointer; }
+#custom-exclusion-list .custom-zone-row.selected { border-color: var(--success); background: rgba(78,204,163,.14); color: var(--text); }
+#custom-exclusion-list .custom-zone-label { flex: 1; min-width: 0; }
+#custom-exclusion-list .custom-zone-delete { width: auto !important; margin: 0 !important; padding: 0 3px; border: 0; background: transparent; color: var(--danger); cursor: pointer; font-size: 16px; line-height: 1; }
+.control-hint { margin-top: 6px; color: var(--text-dim); font-size: var(--font-sm); line-height: 1.25; }
 #search-box { padding: 8px 12px; border-bottom: 1px solid var(--accent); }
 #search-box input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 6px 8px; border-radius: 4px; font-size: var(--font-base); }
 #search-box input::placeholder { color: var(--text-dim); }
@@ -285,7 +291,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
       <label for="custom-exclusion-name">Name<input aria-label="Custom exclusion name" id="custom-exclusion-name" placeholder="Cable rail"></label>
       <button class="btn" id="custom-draw-toggle" type="button" onclick="toggleModelDrawing()">Draw exclusion</button>
       <button class="btn" id="custom-exclusion-rename" type="button" onclick="renameSelectedCustomExclusion()" disabled>Rename selected</button>
-      <div class="control-hint">Draw on the canvas. Select a zone to move, resize, or delete it.</div>
+      <div class="control-hint">Drag to move or resize; × deletes.</div>
       <div id="custom-exclusion-list"></div>
     </fieldset>
     <div id="search-box">
