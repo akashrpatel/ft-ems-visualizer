@@ -3,6 +3,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import * as LayoutUI from './ui/layout-ui';
+import { placeComponents } from './layout/layout-core';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
@@ -1840,23 +1841,41 @@ function runSuggestLayout(modal) {
 
   if (checkedComps.length === 0 && checkedDucts.length === 0) return;
 
-  console.log(`Running SA layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
+  console.log(`Running shared layout for ${checkedComps.length} components + ${checkedDucts.length} cable ducts...`);
 
   let placedComponents = [];
   
-  // Phase 1: Place regular components using SA with cable duct awareness
+  // Phase 1: Place regular components with the shared deterministic engine.
   if (checkedComps.length > 0) {
     // Calculate required edge margin for cable ducts
     const hasLDucts = checkedDucts.some(d => d.comp.name.toLowerCase().includes('cable duct l'));
     const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN; // Cable duct margin + component padding
     
-    console.log(`Cable duct aware SA: reserving ${reservedMargin}mm edge margin (cable duct margin: ${CABLE_DUCT_MARGIN}mm + padding: ${COMP_PAD}mm, base: ${FRAME_MARGIN}mm)`);
-    
-    // Use reserved margin for component placement
-    const seededComponents = seedPlacement(checkedComps, reservedMargin);
-    placedComponents = deterministicGridPlacement(seededComponents, printer.w, printer.h, reservedMargin);
-    
+    console.log(`Shared layout: reserving ${reservedMargin}mm edge margin (cable duct margin: ${CABLE_DUCT_MARGIN}mm + padding: ${COMP_PAD}mm, base: ${FRAME_MARGIN}mm)`);
+
+    const result = placeComponents({
+      frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+      margin: reservedMargin,
+      padding: COMP_PAD,
+      exclusionPadding: COMP_PAD,
+      gridStep: HEX_SPACING,
+      components: checkedComps.map(({ comp, color, catId }) => ({
+        ...comp,
+        x: 0,
+        y: 0,
+        rotation: 0,
+        catColor: color,
+        catId,
+      })),
+    });
+
+    placedComponents = result.placed;
     placed.push(...placedComponents);
+    if (result.unplaced.length > 0) {
+      const names = result.unplaced.map(component => component.name).join(', ');
+      console.warn(`Suggest Layout could not place: ${names}`);
+      alert(`Could not place: ${names}.`);
+    }
   }
 
   // Phase 2: Place cable ducts around/between components
@@ -2954,42 +2973,38 @@ function placeCableDucts(ductList, existingComponents) {
   return result;
 }
 
-// Auto-place existing placed components (re-arrange using SA)
+// Auto-place existing placed components using the shared deterministic engine.
 function autoPlaceExisting() {
   if (placed.length === 0) { alert('No components to arrange. Use "Suggest Layout" to add components first.'); return; }
-  const unlocked = placed.filter(c => !c._locked);
+  const unlocked = placed.filter(c => !c._locked && !c.name.toLowerCase().includes('cable duct'));
   if (unlocked.length === 0) { alert('All components are locked. Unlock some (L key) to auto-place.'); return; }
 
-  console.log(`Auto-placing ${unlocked.length} unlocked components using SA...`);
-
-  // Build component list from unlocked placements
-  const components = unlocked.map(c => ({
-    comp: { name: c.name, w: c.w, h: c.h, stl: c.stl, orient: c.orient },
-    color: c.catColor,
-    catId: getCatIdForComp(c.name),
-  }));
+  console.log(`Auto-placing ${unlocked.length} unlocked components using shared layout...`);
 
   // Calculate margin before filtering placed (need full component set for duct detection)
   const hasLDucts = placed.some(c => c.name.toLowerCase().includes('cable duct l'));
   const reservedMargin = hasLDucts ? Math.max(FRAME_MARGIN, CABLE_DUCT_MARGIN + COMP_PAD) : FRAME_MARGIN;
 
-  // Remove unlocked components from placed array
-  placed = placed.filter(c => c._locked);
-  selected = null;
+  const fixed = placed.filter(c => c._locked || c.name.toLowerCase().includes('cable duct'));
+  const result = placeComponents({
+    frame: { x: 0, y: 0, w: printer.w, h: printer.h },
+    margin: reservedMargin,
+    padding: COMP_PAD,
+    exclusionPadding: COMP_PAD,
+    gridStep: HEX_SPACING,
+    fixed,
+    components: unlocked,
+  });
 
-  // Re-place using simulated annealing
-  const seededComponents = seedPlacement(components, reservedMargin);
-  
-  // Separate cable ducts (fixed) from regular components (optimizable) 
-  const cableDucts = placed.filter(c => c.name.toLowerCase().includes('cable duct'));
-  const nonDuctComponents = placed.filter(c => !c.name.toLowerCase().includes('cable duct'));
-  
-  // Merge with locked non-duct components for SA (SA will respect locked components as obstacles)
-  const allComponents = [...nonDuctComponents, ...seededComponents];
-  const optimizedComponents = annealLayout(allComponents, 3000);
-  
-  // Update placed array: keep cable ducts in original positions + optimized regular components
-  placed = [...cableDucts, ...optimizedComponents];
+  if (result.unplaced.length > 0) {
+    const names = result.unplaced.map(c => c.name).join(', ');
+    console.warn(`Auto Place could not place ${result.unplaced.length} component(s): ${names}`);
+    alert(`Auto Place could not place: ${names}. The existing layout was not changed.`);
+    return;
+  }
+
+  placed = [...fixed, ...result.placed];
+  selected = null;
 
   updateBOM(); 
   draw();
